@@ -1,0 +1,1 @@
+"""Repository-aware AI coding assistant."""

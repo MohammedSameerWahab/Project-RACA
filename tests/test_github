@@ -1,0 +1,45 @@
+from pathlib import Path
+
+import pytest
+
+from src.ingestion.github import (
+    GitHubRepositoryError,
+    get_repository_name,
+    validate_github_url,
+)
+
+
+def test_validate_github_url():
+    validate_github_url(
+        "https://github.com/pallets/flask"
+    )
+
+
+def test_invalid_github_domain():
+    with pytest.raises(GitHubRepositoryError):
+        validate_github_url(
+            "https://example.com/pallets/flask"
+        )
+
+
+def test_invalid_github_url():
+    with pytest.raises(GitHubRepositoryError):
+        validate_github_url("not-a-url")
+
+
+def test_get_repository_name():
+    assert (
+        get_repository_name(
+            "https://github.com/pallets/flask"
+        )
+        == "flask"
+    )
+
+
+def test_get_repository_name_with_git_suffix():
+    assert (
+        get_repository_name(
+            "https://github.com/pallets/flask.git"
+        )
+        == "flask"
+    )
