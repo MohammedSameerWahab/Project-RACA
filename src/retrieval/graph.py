@@ -396,8 +396,6 @@ async def graph_search(
 
     query_terms = extract_query_terms(query)
 
-    print("DEBUG repository:", repository)
-    print("DEBUG terms:", query_terms)
 
 
 
@@ -416,15 +414,13 @@ async def graph_search(
         POSTGRES_URL,
     )
 
-    print("DEBUG calling find_graph_nodes")
-
     try:
         graph_records = await find_graph_nodes(
             driver,
             repository,
             query_terms,
         )
-        print(f"DEBUG: Neo4j returned {len(graph_records)} records.")
+        # print(f"DEBUG: Neo4j returned {len(graph_records)} records.")
         if graph_records:
             print(f"DEBUG: First Neo4j record file_path: {graph_records[0].get('file_path')}")
 
@@ -433,7 +429,13 @@ async def graph_search(
             graph_records,
             fallback_repository=repository,
         )
-        print(f"DEBUG: PostgreSQL returned {len(results)} chunks.")
+        # print(f"DEBUG: PostgreSQL returned {len(results)} chunks.")
+        # print(
+        #     "DEBUG graph retrieval: "
+        #     f"{len(graph_records)} Neo4j relationship records -> "
+        #     f"{len(results)} unique PostgreSQL chunks -> "
+        #     f"{min(len(results), top_k)} final results"
+        # )
 
         return rank_results(
             results,

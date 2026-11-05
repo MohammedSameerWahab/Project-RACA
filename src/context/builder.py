@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from retrieval.hybrid import HybridSearchResult
+from src.retrieval.hybrid import HybridSearchResult
 
 
 DEFAULT_MAX_CONTEXT_TOKENS = 4000

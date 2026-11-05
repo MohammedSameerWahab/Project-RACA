@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from retrieval.graph import graph_search
+from src.retrieval.graph import graph_search
 from retrieval.keyword import KeywordRetriever
 from retrieval.semantic import SemanticRetriever
 
