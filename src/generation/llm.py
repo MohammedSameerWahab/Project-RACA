@@ -1,36 +1,24 @@
 from __future__ import annotations
 
-import os
+import logging
 from collections.abc import AsyncIterator
 
-from dotenv import load_dotenv
-from groq import AsyncGroq
-from groq import APIConnectionError
-from groq import APIStatusError
-from groq import RateLimitError
+from openai import AsyncOpenAI
+from openai import APIConnectionError, APIStatusError
 
 from src.context.builder import ContextResult, estimate_tokens
-
-from src.generation.modes import (
-    GenerationMode,
-    get_mode_instruction,
+from src.generation.modes import GenerationMode, get_mode_instruction
+from src.generation.providers import (
+    DEFAULT_MODEL,
+    PROVIDERS_BY_ID,
+    ModelProvider,
 )
 
+logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-DEFAULT_MODEL = "qwen/qwen3.8-27b"
-DEFAULT_REASONING_EFFORT = "low"
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 DEFAULT_TEMPERATURE = 1.0
 DEFAULT_TOP_P = 0.95
-
-
-# ---------------------------------------------------------------------------
-# System prompt
-# ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """
 You are RACA, a repository-aware coding assistant.
@@ -86,152 +74,57 @@ Follow these rules:
 """.strip()
 
 
-# ---------------------------------------------------------------------------
-# Exceptions
-# ---------------------------------------------------------------------------
-
-
 class LLMGenerationError(RuntimeError):
-    """Raised when the LLM generation stage fails."""
-
-
-# ---------------------------------------------------------------------------
-# LLM generator
-# ---------------------------------------------------------------------------
+    """Raised when all configured LLM providers fail to generate a response."""
 
 
 class LLMGenerator:
-    """
-    Generate answers from repository-aware context using Groq.
-
-    The same AsyncGroq client is reused for the lifetime of this object.
-    """
+    """Generate repository-grounded answers across OpenAI-compatible providers."""
 
     def __init__(
         self,
         model: str = DEFAULT_MODEL,
-        reasoning_effort: str = DEFAULT_REASONING_EFFORT,
         max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
         temperature: float = DEFAULT_TEMPERATURE,
         top_p: float = DEFAULT_TOP_P,
     ) -> None:
-        load_dotenv()
-
-        api_key = os.getenv("GROQ_API_KEY")
-
-        if not api_key:
-            raise ValueError(
-                "GROQ_API_KEY environment variable is not set. "
-                "Add it to your .env file."
-            )
-
-        if not model.strip():
-            raise ValueError("model cannot be empty.")
-
+        if model not in PROVIDERS_BY_ID:
+            raise ValueError(f"Unknown LLM model selection: {model!r}.")
         if max_output_tokens <= 0:
-            raise ValueError(
-                "max_output_tokens must be greater than zero."
-            )
-
+            raise ValueError("max_output_tokens must be greater than zero.")
         if temperature < 0.0:
-            raise ValueError(
-                "temperature must be greater than or equal to zero."
-            )
-
+            raise ValueError("temperature must be greater than or equal to zero.")
         if not 0.0 < top_p <= 1.0:
             raise ValueError(
                 "top_p must be greater than zero and less than or equal to one."
             )
 
         self.model = model
-        self.reasoning_effort = reasoning_effort
         self.max_output_tokens = max_output_tokens
         self.temperature = temperature
         self.top_p = top_p
-
-        self.client = AsyncGroq(
-            api_key=api_key,
-        )
-
-    # -----------------------------------------------------------------------
-    # Normal generation
-    # -----------------------------------------------------------------------
+        self._clients: dict[str, AsyncOpenAI] = {}
 
     async def generate(
         self,
         context_result: ContextResult,
         history: list[dict[str, str]] | None = None,
         mode: GenerationMode = GenerationMode.EXPLAIN,
+        model: str | None = None,
     ) -> str:
-        """
-        Generate a complete response.
-
-        `history` contains previous user/assistant messages from the
-        current application session.
-        """
-
         if not context_result.query.strip():
-            raise ValueError(
-                "ContextResult query cannot be empty."
-            )
+            raise ValueError("ContextResult query cannot be empty.")
 
-        messages = self._build_messages(
-            context_result,
-            history,
-            mode,
-        )
-
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                reasoning_effort=self.reasoning_effort,
-                reasoning_format="hidden",
-                temperature=self.temperature,
-                top_p=self.top_p,
-                max_completion_tokens=self.max_output_tokens,
-                stream=False,
-            )
-
-        except RateLimitError as exc:
-            raise LLMGenerationError(
-                "Groq API rate limit reached. "
-                "Please wait and try again."
-            ) from exc
-
-        except APIConnectionError as exc:
-            raise LLMGenerationError(
-                "Could not connect to the Groq API. "
-                "Check your internet connection and try again."
-            ) from exc
-
-        except APIStatusError as exc:
-            raise LLMGenerationError(
-                f"Groq API returned an error "
-                f"(status {exc.status_code})."
-            ) from exc
-
-        except Exception as exc:
-            raise LLMGenerationError(
-                f"Unexpected LLM generation error: {exc}"
-            ) from exc
-
-        content = response.choices[0].message.content
-
-        if not content:
-            raise LLMGenerationError(
-                "The Groq API returned an empty response."
-            )
-
-        return content.strip()
+        messages = self._build_messages(context_result, history, mode)
+        return await self._generate_response(messages, model or self.model)
 
     async def generate_analysis(
         self,
         query: str,
         verified_context: str,
         mode: GenerationMode = GenerationMode.EXPLAIN,
+        model: str | None = None,
     ) -> str:
-        """Generate an analysis using this generator's existing Groq client."""
         if not query.strip():
             raise ValueError("Analysis query cannot be empty.")
         if not verified_context.strip():
@@ -245,80 +138,109 @@ class LLMGenerator:
                 estimated_tokens=estimate_tokens(verified_context),
             ),
             mode=mode,
+            model=model,
         )
-
-    # -----------------------------------------------------------------------
-    # Streaming generation
-    # -----------------------------------------------------------------------
 
     async def stream_generate(
         self,
         context_result: ContextResult,
         history: list[dict[str, str]] | None = None,
         mode: GenerationMode = GenerationMode.EXPLAIN,
+        model: str | None = None,
     ) -> AsyncIterator[str]:
-        """
-        Stream generated response chunks from Groq.
-        """
-
         if not context_result.query.strip():
-            raise ValueError(
-                "ContextResult query cannot be empty."
+            raise ValueError("ContextResult query cannot be empty.")
+
+        response = await self._generate_response(
+            self._build_messages(context_result, history, mode),
+            model or self.model,
+        )
+        for offset in range(0, len(response), 128):
+            yield response[offset : offset + 128]
+
+    async def _generate_response(
+        self,
+        messages: list[dict[str, str]],
+        preferred_model: str,
+    ) -> str:
+        if preferred_model not in PROVIDERS_BY_ID:
+            raise ValueError(f"Unknown LLM model selection: {preferred_model!r}.")
+
+        providers = self._fallback_order(preferred_model)
+        if not providers:
+            raise LLMGenerationError(
+                "No LLM providers are configured. Add provider API keys to .env."
             )
 
-        messages = self._build_messages(
-            context_result,
-            history,
-            mode,
+        failures: list[str] = []
+        for provider in providers:
+            try:
+                client = self._client_for(provider)
+                response = await client.chat.completions.create(
+                    model=provider.model,
+                    messages=messages,
+                    temperature=self.temperature,
+                    top_p=self.top_p,
+                    max_tokens=self.max_output_tokens,
+                    stream=False,
+                )
+                content = response.choices[0].message.content
+                if not content or not content.strip():
+                    raise ValueError("Provider returned an empty response.")
+                return content.strip()
+            except Exception as exc:
+                reason = self._failure_reason(exc)
+                failures.append(f"{provider.label}: {reason}")
+                logger.warning(
+                    "LLM provider %s failed (%s); trying the next configured provider.",
+                    provider.id,
+                    reason,
+                )
+
+        raise LLMGenerationError(
+            "All configured LLM providers failed. " + "; ".join(failures)
         )
 
-        try:
-            stream = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                reasoning_effort=self.reasoning_effort,
-                reasoning_format="hidden",
-                temperature=self.temperature,
-                top_p=self.top_p,
-                max_completion_tokens=self.max_output_tokens,
-                stream=True,
-            )
+    def _client_for(self, provider: ModelProvider) -> AsyncOpenAI:
+        client = self._clients.get(provider.id)
+        if client is not None:
+            return client
 
-            async for chunk in stream:
-                if not chunk.choices:
-                    continue
+        credentials = provider.credentials()
+        if credentials is None:
+            raise ValueError(f"{provider.label} is not configured.")
+        api_key, base_url = credentials
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            max_retries=0,
+            timeout=45.0,
+        )
+        self._clients[provider.id] = client
+        return client
 
-                content = chunk.choices[0].delta.content
+    @staticmethod
+    def _fallback_order(preferred_model: str) -> tuple[ModelProvider, ...]:
+        providers = tuple(PROVIDERS_BY_ID.values())
+        start = next(
+            index
+            for index, provider in enumerate(providers)
+            if provider.id == preferred_model
+        )
+        ordered = providers[start:] + providers[:start]
+        return tuple(
+            provider for provider in ordered if provider.is_configured()
+        )
 
-                if content:
-                    yield content
-
-        except RateLimitError as exc:
-            raise LLMGenerationError(
-                "Groq API rate limit reached. "
-                "Please wait and try again."
-            ) from exc
-
-        except APIConnectionError as exc:
-            raise LLMGenerationError(
-                "Could not connect to the Groq API. "
-                "Check your internet connection and try again."
-            ) from exc
-
-        except APIStatusError as exc:
-            raise LLMGenerationError(
-                f"Groq API returned an error "
-                f"(status {exc.status_code})."
-            ) from exc
-
-        except Exception as exc:
-            raise LLMGenerationError(
-                f"Unexpected streaming error: {exc}"
-            ) from exc
-
-    # -----------------------------------------------------------------------
-    # Message construction
-    # -----------------------------------------------------------------------
+    @staticmethod
+    def _failure_reason(exc: Exception) -> str:
+        if isinstance(exc, APIStatusError):
+            return f"API returned HTTP {exc.status_code}"
+        if isinstance(exc, APIConnectionError):
+            return "connection failed"
+        if isinstance(exc, ValueError):
+            return str(exc)
+        return type(exc).__name__
 
     @staticmethod
     def _build_messages(
@@ -326,12 +248,7 @@ class LLMGenerator:
         history: list[dict[str, str]] | None = None,
         mode: GenerationMode = GenerationMode.EXPLAIN,
     ) -> list[dict[str, str]]:
-        """
-        Build the message sequence sent to the LLM.
-        """
-
         mode_instruction = get_mode_instruction(mode)
-
         user_message = (
             f"RESPONSE MODE:\n"
             f"{mode.value}\n\n"
@@ -343,41 +260,26 @@ class LLMGenerator:
             "context above:\n\n"
             f"{context_result.query}"
         )
-
         messages: list[dict[str, str]] = [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            }
+            {"role": "system", "content": SYSTEM_PROMPT}
         ]
-
         if history:
             messages.extend(history)
-
-        messages.append(
-            {
-                "role": "user",
-                "content": user_message,
-            }
-        )
-
+        messages.append({"role": "user", "content": user_message})
         return messages
-    # -----------------------------------------------------------------------
-    # Resource cleanup
-    # -----------------------------------------------------------------------
 
     async def close(self) -> None:
-        """Close the underlying Groq HTTP client."""
-
-        await self.client.close()
+        for client in self._clients.values():
+            await client.close()
+        self._clients.clear()
 
     async def __aenter__(self) -> "LLMGenerator":
         return self
 
     async def __aexit__(
         self,
-        exc_type,
-        exc_value,
-        traceback,
+        _exc_type,
+        _exc_value,
+        _traceback,
     ) -> None:
         await self.close()

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from neo4j import AsyncGraphDatabase
@@ -9,8 +8,8 @@ from neo4j import AsyncGraphDatabase
 from src.analysis.navigation import CodeNavigationService
 from src.analysis.repository import AnalysisError, RepositoryAnalysisService
 from src.analysis.stacktrace import parse_stack_trace, resolve_stack_frames
-from src.context.builder import ContextBuilder
 from src.generation.llm import LLMGenerator
+from src.generation.providers import DEFAULT_MODEL
 from src.retrieval.hybrid import HybridRetriever
 from src.workspace import WorkspaceError
 
@@ -27,11 +26,13 @@ class InvestigationService:
         navigation: CodeNavigationService,
         retriever: HybridRetriever,
         llm: LLMGenerator,
+        model: str | None = None,
     ) -> None:
         self.repository = repository
         self.navigation = navigation
         self.retriever = retriever
         self.llm = llm
+        self.model = model or DEFAULT_MODEL
 
     async def explain_architecture(self) -> dict[str, Any]:
         structure = self.repository.structure()
@@ -53,6 +54,7 @@ class InvestigationService:
             "entry points, dependencies, and main data flow. Separate facts "
             "supported by the supplied context from any uncertainty.",
             context,
+            model=self.model,
         )
         return {
             "explanation": explanation,
@@ -90,6 +92,7 @@ class InvestigationService:
             "interact. Use only the graph edges and source excerpts as facts. "
             "Mention limitations where graph data is incomplete.",
             context,
+            model=self.model,
         )
         return {
             "explanation": explanation,
@@ -150,6 +153,7 @@ class InvestigationService:
             "hypotheses from confirmed facts, and give concrete next debugging "
             "steps. Do not claim a root cause without direct evidence.",
             "\n\n".join(context_parts)[:22000],
+            model=self.model,
         )
         return {"analysis": explanation, "candidates": candidates}
 
@@ -188,6 +192,7 @@ class InvestigationService:
             "external/unresolved frames as such, distinguish hypotheses from "
             "facts, and recommend focused debugging steps.",
             context[:22000],
+            model=self.model,
         )
         return {
             "exception": safe_exception,
@@ -311,6 +316,7 @@ class InvestigationService:
             f"Explain the indexed static call flow around {symbol!r}. "
             "Do not present it as a guaranteed runtime sequence.",
             context[:18000],
+            model=self.model,
         )
         return {
             "nodes": list(nodes.values()),
@@ -376,6 +382,7 @@ class InvestigationService:
             "clear issue is supported, say so instead of inventing findings. "
             "Do not modify code.",
             "\n\n".join(context)[:22000],
+            model=self.model,
         )
         return {"scope": scope, "file_path": file_path, "suggestions": analysis}
 

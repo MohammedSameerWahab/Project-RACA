@@ -113,6 +113,7 @@ class RepositoryAssistant:
         cursor_column: int | None = None,
         selected_code: str | None = None,
         mode: GenerationMode = GenerationMode.EXPLAIN,
+        model: str | None = None,
     ) -> AssistantResult:
         context_result, cursor_context = await self._prepare_context(
             query=query,
@@ -128,6 +129,7 @@ class RepositoryAssistant:
             context_result,
             history=history_for_request,
             mode=mode,
+            model=model,
         )
 
         self._append_history(
@@ -139,7 +141,7 @@ class RepositoryAssistant:
 
         return AssistantResult(
             response=response,
-            model=self.llm.model,
+            model=model or self.llm.model,
             repository=repository,
             context_chunks=len(context_result.chunks),
             context_tokens=context_result.estimated_tokens,
@@ -172,6 +174,7 @@ class RepositoryAssistant:
         cursor_column: int | None = None,
         selected_code: str | None = None,
         mode: GenerationMode = GenerationMode.EXPLAIN,
+        model: str | None = None,
     ) -> AsyncIterator[str]:
 
         context_result, _ = await self._prepare_context(
@@ -190,6 +193,7 @@ class RepositoryAssistant:
             context_result,
             history=history_for_request,
             mode=mode,
+            model=model,
         ):
             full_response.append(chunk)
             yield chunk

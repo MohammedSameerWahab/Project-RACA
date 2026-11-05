@@ -40,6 +40,25 @@ repository does not clear the active index first: the new clone and indexes are
 validated before the old repository's PostgreSQL rows, Neo4j nodes, local clone, and
 CocoIndex state are retired.
 
+## LLM providers
+
+Choose a preferred model from the home page. RACA tries that provider first, then
+walks the provider list in the displayed order, skipping providers without credentials
+and falling over to the next provider after an API error. All providers use the
+OpenAI-compatible Python SDK through a shared generation layer. The same selection
+is used by the assistant and generated repository analyses.
+
+Supported selections are Groq Qwen 3 32B, Google Gemini 3.1 Flash-Lite, NVIDIA
+Llama 3.3 70B, Z.AI GLM-4.5-Flash, and Cloudflare Llama 3.1 8B. Configure
+the corresponding `GROQ_API_KEY`, `GOOGLE_API_KEY`, `NVIDEA_API_KEY`, `GLM_API_KEY`,
+and `CLOUDFLARE_API_KEY` values in `.env`. Cloudflare Workers AI also requires
+`CLOUDFLARE_ACCOUNT_ID`. The selector marks providers without required configuration
+as unavailable.
+
+These are intended for the providers' free/developer tiers, but quotas, model IDs,
+and eligibility can change by account and region. Provider usage limits still apply;
+check each provider's current pricing and free-tier terms before use.
+
 ## Repository analysis and navigation
 
 The home workspace provides the existing editor plus repository understanding,
@@ -57,8 +76,9 @@ declaration matching for JavaScript/TypeScript is intentionally limited to commo
 function/class forms, and other textual references are reported as references rather
 than calls. The graph index currently extracts definitions, imports, and calls only
 from Python; graph-based explanations report the records available from that index.
-Architecture, relationship, bug, stack-trace, flow, and improvement explanations reuse
-the assistant's configured Groq client. Deterministic lookups do not call the LLM.
+Architecture, relationship, bug, stack-trace, flow, and improvement explanations use
+the same selected provider and automatic fallback as the assistant. Deterministic
+lookups do not call the LLM.
 
 ## Architecture
 

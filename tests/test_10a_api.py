@@ -54,3 +54,26 @@ def test_repository_status(monkeypatch: pytest.MonkeyPatch) -> None:
     assert data["repository"] == "test-repository"
     assert data["repository_key"] == "test-repository-key"
     assert data["ready"] is True
+
+
+def test_llm_model_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    isolate_lifespan(monkeypatch)
+    with TestClient(app) as client:
+        response = client.get("/api/llm/models")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["default_model"] in {
+        "groq-qwen",
+        "gemini-flash",
+        "nvidia-llama",
+        "glm-flash",
+        "cloudflare-llama",
+    }
+    assert [model["id"] for model in data["models"]] == [
+        "groq-qwen",
+        "gemini-flash",
+        "nvidia-llama",
+        "glm-flash",
+        "cloudflare-llama",
+    ]

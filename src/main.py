@@ -16,6 +16,7 @@ from src.ingestion.github import GitHubRepositoryError
 
 from fastapi import (
     FastAPI,
+    Header,
     HTTPException,
 )
 
@@ -34,6 +35,11 @@ from src.analysis.investigation import InvestigationService
 from src.analysis.navigation import CodeNavigationService
 from src.analysis.repository import AnalysisError, RepositoryAnalysisService
 from src.generation.llm import LLMGenerationError
+from src.generation.providers import (
+    DEFAULT_MODEL,
+    configured_providers,
+    model_options,
+)
 
 from dotenv import load_dotenv
 
@@ -69,6 +75,7 @@ class AssistantRequest(BaseModel):
     cursor_column: int | None = None
     selected_code: str | None = None
     mode: GenerationMode = GenerationMode.EXPLAIN
+    model: str = DEFAULT_MODEL
 
 
 class AnalysisQueryRequest(BaseModel):
@@ -125,7 +132,7 @@ def _navigation_service() -> CodeNavigationService:
     return CodeNavigationService(pipeline.workspace)
 
 
-def _investigation_service() -> InvestigationService:
+def _investigation_service(model: str) -> InvestigationService:
     repository = _repository_analysis()
     navigation = _navigation_service()
     assistant = pipeline.assistant
@@ -134,6 +141,7 @@ def _investigation_service() -> InvestigationService:
         navigation,
         assistant.retriever,
         assistant.llm,
+        model,
     )
 
 
@@ -222,6 +230,11 @@ async def workspace_tree() -> dict:
     except WorkspaceNotReadyError as exc:
         raise HTTPException(
             status_code=409,
+            detail=str(exc),
+        ) from exc
+    except LLMGenerationError as exc:
+        raise HTTPException(
+            status_code=502,
             detail=str(exc),
         ) from exc
 
@@ -352,6 +365,16 @@ async def health() -> dict[str, str]:
     }
 
 
+@app.get("/api/llm/models")
+async def llm_models() -> dict[str, object]:
+    configured = configured_providers()
+    default_model = configured[0].id if configured else DEFAULT_MODEL
+    return {
+        "models": model_options(),
+        "default_model": default_model,
+    }
+
+
 @app.get("/api/repository/status")
 async def repository_status() -> dict[str, object]:
     """
@@ -385,9 +408,11 @@ async def repository_structure() -> dict[str, object]:
 
 
 @app.post("/api/analysis/repository/architecture")
-async def repository_architecture() -> dict[str, object]:
+async def repository_architecture(
+    model: str = Header(default=DEFAULT_MODEL, alias="X-Raca-Model"),
+) -> dict[str, object]:
     try:
-        service = _investigation_service()
+        service = _investigation_service(model)
         return await _analysis_result(service.explain_architecture())
     except HTTPException:
         raise
@@ -398,9 +423,10 @@ async def repository_architecture() -> dict[str, object]:
 @app.post("/api/analysis/repository/relationships")
 async def repository_relationships(
     request: AnalysisQueryRequest,
+    model: str = Header(default=DEFAULT_MODEL, alias="X-Raca-Model"),
 ) -> dict[str, object]:
     try:
-        service = _investigation_service()
+        service = _investigation_service(model)
         return await _analysis_result(
             service.explain_relationships(request.query)
         )
@@ -493,9 +519,10 @@ def find_configuration_files() -> dict[str, object]:
 @app.post("/api/bugs/locations")
 async def investigate_bug(
     request: BugInvestigationRequest,
+    model: str = Header(default=DEFAULT_MODEL, alias="X-Raca-Model"),
 ) -> dict[str, object]:
     try:
-        service = _investigation_service()
+        service = _investigation_service(model)
         return await _analysis_result(
             service.investigate_bug(
                 request.description,
@@ -512,9 +539,10 @@ async def investigate_bug(
 @app.post("/api/bugs/stacktrace")
 async def explain_stack_trace(
     request: StackTraceRequest,
+    model: str = Header(default=DEFAULT_MODEL, alias="X-Raca-Model"),
 ) -> dict[str, object]:
     try:
-        service = _investigation_service()
+        service = _investigation_service(model)
         return await _analysis_result(
             service.explain_stack_trace(request.stack_trace)
         )
@@ -527,9 +555,10 @@ async def explain_stack_trace(
 @app.post("/api/bugs/execution-flow")
 async def trace_execution_flow(
     request: ExecutionFlowRequest,
+    model: str = Header(default=DEFAULT_MODEL, alias="X-Raca-Model"),
 ) -> dict[str, object]:
     try:
-        service = _investigation_service()
+        service = _investigation_service(model)
         return await _analysis_result(
             service.execution_flow(request.symbol)
         )
@@ -542,9 +571,10 @@ async def trace_execution_flow(
 @app.post("/api/bugs/improvements")
 async def suggest_improvements(
     request: ImprovementsRequest,
+    model: str = Header(default=DEFAULT_MODEL, alias="X-Raca-Model"),
 ) -> dict[str, object]:
     try:
-        service = _investigation_service()
+        service = _investigation_service(model)
         return await _analysis_result(
             service.suggest_improvements(
                 request.scope,
@@ -650,6 +680,7 @@ async def assistant_ask(
             cursor_column=request.cursor_column,
             selected_code=request.selected_code,
             mode=request.mode,
+            model=request.model,
         )
 
     except AssistantNotReadyError as exc:
@@ -661,6 +692,12 @@ async def assistant_ask(
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except LLMGenerationError as exc:
+        raise HTTPException(
+            status_code=502,
             detail=str(exc),
         ) from exc
 
@@ -692,16 +729,27 @@ async def assistant_ask_stream(
             detail=str(exc),
         ) from exc
 
-    async def generate():
-        async for chunk in assistant.stream_ask(
+    try:
+        result = await assistant.ask(
             query=request.query,
             file_path=request.file_path,
             cursor_line=request.cursor_line,
             cursor_column=request.cursor_column,
             selected_code=request.selected_code,
             mode=request.mode,
-        ):
-            yield chunk
+            model=request.model,
+        )
+    except AssistantNotReadyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LLMGenerationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    async def generate():
+        response = result.response
+        for offset in range(0, len(response), 128):
+            yield response[offset : offset + 128]
 
     return StreamingResponse(
         generate(),

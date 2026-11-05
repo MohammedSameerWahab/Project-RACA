@@ -167,7 +167,12 @@ def test_node_stack_trace_frame_parser() -> None:
 
 
 class FakeLLM:
-    async def generate_analysis(self, query: str, verified_context: str) -> str:
+    async def generate_analysis(
+        self,
+        query: str,
+        verified_context: str,
+        model: str | None = None,
+    ) -> str:
         assert verified_context
         return "Evidence-based analysis."
 
@@ -191,7 +196,9 @@ class FakeRetriever:
 
 def test_likely_bug_locations_use_hybrid_evidence(tmp_path: Path) -> None:
     workspace, repository, navigation = services(tmp_path)
-    service = InvestigationService(repository, navigation, FakeRetriever(), FakeLLM())
+    service = InvestigationService(
+        repository, navigation, FakeRetriever(), FakeLLM(), model="groq-qwen"
+    )
 
     result = asyncio.run(service.investigate_bug("Task fails on execution"))
 
@@ -203,7 +210,9 @@ def test_likely_bug_locations_use_hybrid_evidence(tmp_path: Path) -> None:
 
 def test_file_scoped_improvements_use_source_context(tmp_path: Path) -> None:
     workspace, repository, navigation = services(tmp_path)
-    service = InvestigationService(repository, navigation, FakeRetriever(), FakeLLM())
+    service = InvestigationService(
+        repository, navigation, FakeRetriever(), FakeLLM(), model="groq-qwen"
+    )
 
     result = asyncio.run(
         service.suggest_improvements("file", file_path="src/main.py")
@@ -218,7 +227,9 @@ def test_stack_trace_response_does_not_expose_external_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace, repository, navigation = services(tmp_path)
-    service = InvestigationService(repository, navigation, FakeRetriever(), FakeLLM())
+    service = InvestigationService(
+        repository, navigation, FakeRetriever(), FakeLLM(), model="groq-qwen"
+    )
 
     async def no_graph_neighbors(locations):
         return []
@@ -346,7 +357,9 @@ def test_execution_flow_uses_indexed_call_edges(
         "driver",
         lambda *args, **kwargs: driver,
     )
-    service = InvestigationService(repository, navigation, FakeRetriever(), FakeLLM())
+    service = InvestigationService(
+        repository, navigation, FakeRetriever(), FakeLLM(), model="groq-qwen"
+    )
 
     result = asyncio.run(service.execution_flow("run_task"))
 

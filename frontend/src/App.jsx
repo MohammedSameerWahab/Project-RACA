@@ -74,6 +74,10 @@ function App() {
   const [query, setQuery] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [generationMode, setGenerationMode] = useState("explain");
+  const [llmModels, setLlmModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState(
+    () => window.localStorage.getItem("raca.preferredModel") || "groq-qwen"
+  );
 
   const [explorerCollapsed, setExplorerCollapsed] = useState(false);
   const [assistantCollapsed, setAssistantCollapsed] = useState(false);
@@ -82,7 +86,11 @@ function App() {
   const chatEndRef = useRef(null);
   const saveFileRef = useRef(null);
   const navigationTargetRef = useRef(null);
-  const request = useCallback(apiRequest, []);
+  const request = useCallback((path, options = {}) => {
+    const headers = new Headers(options.headers || {});
+    headers.set("X-Raca-Model", selectedModel);
+    return apiRequest(path, { ...options, headers });
+  }, [selectedModel]);
 
   const navigate = useCallback((nextPage) => {
     const safePage = PAGES.has(nextPage) ? nextPage : "home";
@@ -154,6 +162,37 @@ function App() {
   useEffect(() => {
     checkRepositoryStatus();
   }, [checkRepositoryStatus]);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest("/api/llm/models")
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+        setLlmModels(data.models || []);
+        setSelectedModel((current) => {
+          const currentModel = data.models?.find((model) => model.id === current);
+          return currentModel?.configured
+            ? current
+            : data.default_model || "groq-qwen";
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err.message);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (llmModels.some((model) => model.id === selectedModel && model.configured)) {
+      window.localStorage.setItem("raca.preferredModel", selectedModel);
+    }
+  }, [llmModels, selectedModel]);
 
   useEffect(() => {
     let timer;
@@ -463,6 +502,7 @@ function App() {
             cursor_column: cursorPosition.column,
             selected_code: selectedCode || null,
             mode: generationMode,
+            model: selectedModel,
           }),
         }
       );
@@ -649,6 +689,33 @@ function App() {
               )}
               {repository && <span>{repositoryProfile?.url ? "GitHub" : "Local repository"}</span>}
             </div>
+          </section>
+          <section className="model-preference" aria-labelledby="model-preference-title">
+            <div className="model-preference-copy">
+              <span className="eyebrow">ASSISTANT MODEL</span>
+              <h2 id="model-preference-title">Choose your preferred model</h2>
+              <p>
+                {llmModels.some((model) => model.configured)
+                  ? "If it is busy or rate-limited, RACA tries the remaining configured providers in order."
+                  : "Add at least one provider API key to .env to enable model selection."}
+              </p>
+            </div>
+            <label className="model-preference-select" htmlFor="preferred-model">
+              <span>Start with</span>
+              <select
+                id="preferred-model"
+                value={selectedModel}
+                onChange={(event) => setSelectedModel(event.target.value)}
+                disabled={isStreaming}
+              >
+                {llmModels.length === 0 && <option value="groq-qwen">Loading models…</option>}
+                {llmModels.map((model) => (
+                  <option key={model.id} value={model.id} disabled={!model.configured}>
+                    {model.label}{model.configured ? "" : " · not configured"}
+                  </option>
+                ))}
+              </select>
+            </label>
           </section>
           {ingesting && (
             <div className="home-progress" role="status">

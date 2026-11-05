@@ -873,6 +873,59 @@ button {
   text-transform: capitalize;
 }
 
+.model-preference {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin: -12px 0 30px;
+  padding: 18px 20px;
+  border: 1px solid #6e40c966;
+  border-radius: 10px;
+  background: linear-gradient(110deg, #8957e510, #11161d 72%);
+}
+
+.model-preference-copy h2 {
+  margin: 6px 0;
+  color: #f0f6fc;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.model-preference-copy p {
+  color: #8b949e;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.model-preference-select {
+  display: grid;
+  gap: 6px;
+  flex: 0 0 min(310px, 42%);
+  color: #8b949e;
+  font-size: 11px;
+}
+
+.model-preference-select select {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid #484f58;
+  border-radius: 7px;
+  background: #0d1117;
+  color: #e6edf3;
+  font-size: 13px;
+}
+
+.model-preference-select select:focus {
+  border-color: #a371f7;
+  outline: none;
+}
+
+.model-preference-select select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .repository-status {
   color: #3fb950;
 }
@@ -1165,6 +1218,16 @@ button {
   .home-section-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .model-preference {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .model-preference-select {
+    flex-basis: auto;
   }
 
   .home-footer {
