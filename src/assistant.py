@@ -8,11 +8,11 @@ from src.context.builder import (
     ContextResult,
     estimate_tokens,
 )
-from generation.llm import LLMGenerator
-from retrieval.hybrid import HybridRetriever
-from workspace import RepositoryWorkspace
+from src.generation.llm import LLMGenerator
+from src.retrieval.hybrid import HybridRetriever
+from src.workspace import RepositoryWorkspace
 
-from generation.modes import GenerationMode
+from src.generation.modes import GenerationMode
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -78,10 +78,17 @@ class RepositoryAssistant:
     def __init__(
         self,
         workspace: RepositoryWorkspace,
+        database_url: str | None = None,
+        repository_key: str | None = None,
+        table_name: str = "raca_code_embeddings",
     ) -> None:
         self.workspace = workspace
 
-        self.retriever = HybridRetriever()
+        self.retriever = HybridRetriever(
+            database_url=database_url,
+            repository_key=repository_key,
+            table_name=table_name,
+        )
 
         self.context_builder = ContextBuilder(
             max_context_tokens=4000,
@@ -263,8 +270,8 @@ class RepositoryAssistant:
         if not file_path:
             return None
 
-        line = cursor_line or 1
-        column = cursor_column or 1
+        line = 1 if cursor_line is None else cursor_line
+        column = 1 if cursor_column is None else cursor_column
 
         if line < 1:
             raise ValueError(

@@ -193,6 +193,7 @@ async def fetch_chunks_for_nodes(
     pool: asyncpg.Pool,
     records: list[dict],
     fallback_repository: str,
+    table_name: str = "raca_code_embeddings",
 ) -> list[GraphSearchResult]:
     """
     Retrieve actual code chunks corresponding to graph nodes and their
@@ -275,8 +276,11 @@ async def fetch_chunks_for_nodes(
         if end_line is None or end_line <= 0:
             end_line = 10**9
 
+        if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", table_name):
+            raise ValueError("Invalid PostgreSQL table name.")
+
         rows = await pool.fetch(
-            """
+            f"""
             SELECT
                 id,
                 repository,
@@ -285,8 +289,8 @@ async def fetch_chunks_for_nodes(
                 code,
                 start_line,
                 end_line
-            FROM raca_code_embeddings
-            WHERE (repository = $1 OR repository = 'Project RACA' OR repository = 'flask')
+            FROM "{table_name}"
+            WHERE repository = $1
               AND REPLACE(filename, chr(92), '/') = REPLACE($2, chr(92), '/')
               AND start_line <= $4
               AND end_line >= $3
@@ -378,9 +382,11 @@ def rank_results(
 # -------------------------------------------------------------------
 
 async def graph_search(
-    
     query: str,
     top_k: int = 10,
+    repository_key: str | None = None,
+    table_name: str = "raca_code_embeddings",
+    database_url: str | None = None,
 ) -> list[GraphSearchResult]:
     """Perform graph-based repository retrieval."""
 
@@ -390,8 +396,12 @@ async def graph_search(
     if top_k <= 0:
         return []
 
-    repository = os.path.basename(
-        os.path.normpath(RACA_REPOSITORY_PATH)
+    if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", table_name):
+        raise ValueError("Invalid PostgreSQL table name.")
+
+    repository = repository_key or os.environ.get(
+        "RACA_REPOSITORY_KEY",
+        os.path.basename(os.path.normpath(RACA_REPOSITORY_PATH)),
     )
 
     query_terms = extract_query_terms(query)
@@ -410,9 +420,7 @@ async def graph_search(
         ),
     )
 
-    pool = await asyncpg.create_pool(
-        POSTGRES_URL,
-    )
+    pool = await asyncpg.create_pool(database_url or POSTGRES_URL)
 
     try:
         graph_records = await find_graph_nodes(
@@ -428,6 +436,7 @@ async def graph_search(
             pool,
             graph_records,
             fallback_repository=repository,
+            table_name=table_name,
         )
         # print(f"DEBUG: PostgreSQL returned {len(results)} chunks.")
         # print(

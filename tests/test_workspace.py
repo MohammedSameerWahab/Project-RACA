@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from workspace import (
+from src.workspace import (
     RepositoryWorkspace,
     WorkspaceFileError,
     WorkspacePathError,
@@ -141,4 +141,44 @@ def test_missing_file(
     ):
         workspace.read_file(
             "does-not-exist.py"
+        )
+
+
+def test_write_file(
+    tmp_path: Path,
+) -> None:
+    repository = create_test_repository(tmp_path)
+    workspace = RepositoryWorkspace(repository)
+
+    saved_file = workspace.write_file(
+        "src/main.py",
+        "print('updated')\n",
+    )
+
+    assert saved_file.content == "print('updated')\n"
+    assert (repository / "src" / "main.py").read_text(
+        encoding="utf-8"
+    ) == "print('updated')\n"
+
+
+def test_write_file_rejects_path_traversal(
+    tmp_path: Path,
+) -> None:
+    repository = create_test_repository(tmp_path)
+    workspace = RepositoryWorkspace(repository)
+
+    with pytest.raises(WorkspacePathError):
+        workspace.write_file("../../outside.txt", "unsafe")
+
+
+def test_write_file_rejects_oversized_content(
+    tmp_path: Path,
+) -> None:
+    repository = create_test_repository(tmp_path)
+    workspace = RepositoryWorkspace(repository)
+
+    with pytest.raises(WorkspaceFileError, match="too large"):
+        workspace.write_file(
+            "src/main.py",
+            "x" * (workspace.MAX_FILE_SIZE + 1),
         )

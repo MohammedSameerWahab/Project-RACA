@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from context.builder import ContextBuilder
-from generation.llm import LLMGenerator
-from retrieval.hybrid import HybridRetriever
+from src.context.builder import ContextBuilder
+from src.generation.llm import LLMGenerator
+from src.retrieval.hybrid import HybridRetriever
 
 
 async def main() -> None:

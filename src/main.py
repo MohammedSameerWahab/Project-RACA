@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,23 +12,28 @@ from src.pipeline import (
     PipelineError,
     RACAPipeline,
 )
+from src.ingestion.github import GitHubRepositoryError
 
 from fastapi import (
     FastAPI,
     HTTPException,
 )
 
-from workspace import (
+from src.workspace import (
     WorkspaceError,
     WorkspaceFileError,
     WorkspaceNotReadyError,
     WorkspacePathError,
 )
 
-from assistant import (
+from src.assistant import (
     AssistantError,
     AssistantNotReadyError,
 )
+from src.analysis.investigation import InvestigationService
+from src.analysis.navigation import CodeNavigationService
+from src.analysis.repository import AnalysisError, RepositoryAnalysisService
+from src.generation.llm import LLMGenerationError
 
 from dotenv import load_dotenv
 
@@ -52,6 +56,12 @@ class WorkspaceFileResponse(BaseModel):
     size: int
     content: str
 
+
+class WorkspaceFileSaveRequest(BaseModel):
+    content: str
+    repository_key: str
+
+
 class AssistantRequest(BaseModel):
     query: str
     file_path: str | None = None
@@ -60,8 +70,86 @@ class AssistantRequest(BaseModel):
     selected_code: str | None = None
     mode: GenerationMode = GenerationMode.EXPLAIN
 
+
+class AnalysisQueryRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=200)
+
+
+class BugInvestigationRequest(BaseModel):
+    description: str = Field(min_length=1, max_length=4000)
+    file_path: str | None = Field(default=None, max_length=1000)
+    selected_code: str | None = Field(default=None, max_length=8000)
+
+
+class StackTraceRequest(BaseModel):
+    stack_trace: str = Field(min_length=1, max_length=40000)
+
+
+class ExecutionFlowRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=200)
+
+
+class ImprovementsRequest(BaseModel):
+    scope: str
+    file_path: str | None = Field(default=None, max_length=1000)
+    selected_code: str | None = Field(default=None, max_length=8000)
+
     
 pipeline = RACAPipeline()
+
+
+def _repository_analysis() -> RepositoryAnalysisService:
+    repository_key = pipeline.current_repository_key
+    if repository_key is None:
+        raise HTTPException(
+            status_code=409,
+            detail="No repository is active.",
+        )
+    return RepositoryAnalysisService(
+        pipeline.workspace,
+        repository_key,
+        neo4j_uri=pipeline.neo4j_uri,
+        neo4j_user=pipeline.neo4j_user,
+        neo4j_password=pipeline.neo4j_password,
+        neo4j_database=pipeline.neo4j_database,
+        repository_name=pipeline.current_repository,
+    )
+
+
+def _navigation_service() -> CodeNavigationService:
+    if pipeline.current_repository is None:
+        raise HTTPException(
+            status_code=409,
+            detail="No repository is active.",
+        )
+    return CodeNavigationService(pipeline.workspace)
+
+
+def _investigation_service() -> InvestigationService:
+    repository = _repository_analysis()
+    navigation = _navigation_service()
+    assistant = pipeline.assistant
+    return InvestigationService(
+        repository,
+        navigation,
+        assistant.retriever,
+        assistant.llm,
+    )
+
+
+async def _analysis_result(operation):
+    try:
+        return await operation
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (AnalysisError, LLMGenerationError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except AssistantNotReadyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (WorkspacePathError, WorkspaceNotReadyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except WorkspaceFileError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @asynccontextmanager
@@ -71,7 +159,10 @@ async def lifespan(app: FastAPI):
     except PipelineError as exc:
         print(f"Repository restoration skipped: {exc}")
 
-    yield
+    try:
+        yield
+    finally:
+        await pipeline.close()
 
 
 
@@ -200,6 +291,57 @@ async def workspace_file(
         content=file.content,
     )
 
+
+@app.put(
+    "/api/workspace/file/{file_path:path}",
+    response_model=WorkspaceFileResponse,
+)
+async def save_workspace_file(
+    file_path: str,
+    request: WorkspaceFileSaveRequest,
+) -> WorkspaceFileResponse:
+    try:
+        file = await pipeline.save_file(
+            file_path,
+            request.content,
+            request.repository_key,
+        )
+    except WorkspaceNotReadyError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
+    except WorkspacePathError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    except WorkspaceFileError as exc:
+        status_code = 413 if "too large" in str(exc).lower() else 404
+        raise HTTPException(
+            status_code=status_code,
+            detail=str(exc),
+        ) from exc
+    except PipelineError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
+
+    return WorkspaceFileResponse(
+        path=file.path,
+        name=file.name,
+        extension=file.extension,
+        size=file.size,
+        content=file.content,
+    )
+
+
+@app.get("/api/index/status")
+async def index_status() -> dict[str, str]:
+    return pipeline.index_status()
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Basic backend health check."""
@@ -218,11 +360,202 @@ async def repository_status() -> dict[str, object]:
 
     return {
         "repository": pipeline.current_repository,
+        "repository_key": pipeline.current_repository_key,
         "ready": (
             pipeline.current_repository
             is not None
         ),
     }
+
+
+@app.get("/api/analysis/repository/profile")
+async def repository_profile() -> dict[str, object]:
+    try:
+        return _repository_analysis().profile(pipeline.index_status())
+    except AnalysisError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/analysis/repository/structure")
+async def repository_structure() -> dict[str, object]:
+    try:
+        return _repository_analysis().structure()
+    except AnalysisError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/analysis/repository/architecture")
+async def repository_architecture() -> dict[str, object]:
+    try:
+        service = _investigation_service()
+        return await _analysis_result(service.explain_architecture())
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/analysis/repository/relationships")
+async def repository_relationships(
+    request: AnalysisQueryRequest,
+) -> dict[str, object]:
+    try:
+        service = _investigation_service()
+        return await _analysis_result(
+            service.explain_relationships(request.query)
+        )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/navigation/implementation")
+def locate_implementations(
+    query: str = "",
+    kind: str | None = None,
+) -> dict[str, object]:
+    try:
+        results = _navigation_service().definitions(query, kind)
+        return {"results": results, "count": len(results)}
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/navigation/function")
+def find_functions(query: str = "") -> dict[str, object]:
+    try:
+        service = _navigation_service()
+        results = service.definitions(query)
+        results = [
+            item for item in results
+            if item["type"] in {"function", "method"}
+        ]
+        return {
+            "results": results,
+            "count": len(results),
+            "graph_coverage": "Python definitions are AST-indexed; other supported language definitions are matched from source declarations.",
+        }
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/navigation/usages")
+async def find_usages(query: str = "") -> dict[str, object]:
+    try:
+        source_results = _navigation_service().usages(query)
+        graph_results = await _repository_analysis().graph_usages(query)
+        deduplicated = {
+            (
+                item.get("file_path"),
+                item.get("line"),
+                item.get("kind"),
+                item.get("direction"),
+            ): item
+            for item in [*graph_results, *source_results]
+        }
+        results = list(deduplicated.values())
+        results.sort(
+            key=lambda item: (
+                str(item.get("file_path", "")).lower(),
+                int(item.get("line", 0) or 0),
+            )
+        )
+        return {
+            "results": results,
+            "count": len(results),
+            "coverage_note": (
+                "Indexed Neo4j CALLS/IMPORTS edges are combined with AST and textual "
+                "source references. Dynamic calls and generated code may not be found."
+            ),
+        }
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except AnalysisError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/navigation/config")
+def find_configuration_files() -> dict[str, object]:
+    try:
+        results = _navigation_service().configurations()
+        return {"results": results, "count": len(results)}
+    except HTTPException:
+        raise
+
+
+@app.post("/api/bugs/locations")
+async def investigate_bug(
+    request: BugInvestigationRequest,
+) -> dict[str, object]:
+    try:
+        service = _investigation_service()
+        return await _analysis_result(
+            service.investigate_bug(
+                request.description,
+                request.file_path,
+                request.selected_code,
+            )
+        )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/bugs/stacktrace")
+async def explain_stack_trace(
+    request: StackTraceRequest,
+) -> dict[str, object]:
+    try:
+        service = _investigation_service()
+        return await _analysis_result(
+            service.explain_stack_trace(request.stack_trace)
+        )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/bugs/execution-flow")
+async def trace_execution_flow(
+    request: ExecutionFlowRequest,
+) -> dict[str, object]:
+    try:
+        service = _investigation_service()
+        return await _analysis_result(
+            service.execution_flow(request.symbol)
+        )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/bugs/improvements")
+async def suggest_improvements(
+    request: ImprovementsRequest,
+) -> dict[str, object]:
+    try:
+        service = _investigation_service()
+        return await _analysis_result(
+            service.suggest_improvements(
+                request.scope,
+                request.file_path,
+                request.selected_code,
+            )
+        )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/api/repository/ingest")
@@ -243,6 +576,11 @@ async def ingest_repository(
             status_code=400,
             detail=str(exc),
         ) from exc
+    except GitHubRepositoryError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
 
     except PipelineError as exc:
         raise HTTPException(
@@ -253,6 +591,7 @@ async def ingest_repository(
     return {
         "status": "ready",
         "repository": result.repository,
+        "repository_key": result.repository_key,
         "local_path": str(
             result.local_path
         ),
@@ -262,6 +601,7 @@ async def ingest_repository(
         "neo4j_indexed": (
             result.neo4j_indexed
         ),
+        "cleanup_warning": result.cleanup_warning,
     }
 
 
@@ -338,9 +678,22 @@ async def assistant_ask(
 async def assistant_ask_stream(
     request: AssistantRequest,
 ) -> StreamingResponse:
+    if not request.query.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Assistant query cannot be empty.",
+        )
+
+    try:
+        assistant = pipeline.assistant
+    except AssistantNotReadyError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
 
     async def generate():
-        async for chunk in pipeline.assistant.stream_ask(
+        async for chunk in assistant.stream_ask(
             query=request.query,
             file_path=request.file_path,
             cursor_line=request.cursor_line,

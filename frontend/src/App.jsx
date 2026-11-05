@@ -1,20 +1,66 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  BugInvestigation,
+  CodeNavigation,
+  RepositoryUnderstanding,
+} from "./AnalysisPages";
+import heroArt from "./assets/hero.png";
 import "./App.css";
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const PAGES = new Set(["home", "editor", "understanding", "navigation", "bugs"]);
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || "The request failed.");
+  }
+  return data;
+}
+
+function encodePath(path) {
+  return path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function indexStatusLabel(status) {
+  if (status === "error") {
+    return "Index error";
+  }
+  if (["indexing", "queued", "cloning"].includes(status)) {
+    return "Index updating";
+  }
+  return "Index ready";
+}
 
 function App() {
+  const [page, setPage] = useState(() => {
+    const requested = window.location.hash.slice(1);
+    return PAGES.has(requested) ? requested : "home";
+  });
   const [repository, setRepository] = useState(null);
+  const [repositoryProfile, setRepositoryProfile] = useState(null);
+  const [repositoryKey, setRepositoryKey] = useState(null);
   const [githubUrl, setGithubUrl] = useState("");
   const [ingesting, setIngesting] = useState(false);
   const [error, setError] = useState("");
+  const [showReplaceForm, setShowReplaceForm] = useState(false);
+  const [indexStatus, setIndexStatus] = useState({
+    status: "idle",
+    message: "No index refresh is pending.",
+  });
 
   const [tree, setTree] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState("");
+  const [savedContent, setSavedContent] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const [cursorPosition, setCursorPosition] = useState({
     line: 1,
@@ -22,6 +68,7 @@ function App() {
   });
 
   const [selectedCode, setSelectedCode] = useState("");
+  const [navigationTarget, setNavigationTarget] = useState(null);
 
   const [messages, setMessages] = useState([]);
   const [query, setQuery] = useState("");
@@ -33,19 +80,51 @@ function App() {
 
   const editorRef = useRef(null);
   const chatEndRef = useRef(null);
-  
+  const saveFileRef = useRef(null);
+  const navigationTargetRef = useRef(null);
+  const request = useCallback(apiRequest, []);
 
-  useEffect(() => {
-    checkRepositoryStatus();
+  const navigate = useCallback((nextPage) => {
+    const safePage = PAGES.has(nextPage) ? nextPage : "home";
+    window.history.pushState({ page: safePage }, "", `#${safePage}`);
+    setPage(safePage);
   }, []);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-    });
-  }, [messages]);
+    function handlePopState() {
+      const requested = window.location.hash.slice(1);
+      setPage(PAGES.has(requested) ? requested : "home");
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
-  async function checkRepositoryStatus() {
+  const loadRepositoryProfile = useCallback(async () => {
+    try {
+      const data = await apiRequest("/api/analysis/repository/profile");
+      setRepositoryProfile(data);
+    } catch (err) {
+      setRepositoryProfile(null);
+      setError(err.message);
+    }
+  }, []);
+
+  const loadWorkspaceTree = useCallback(async () => {
+    const response = await fetch(
+      `${API_BASE}/api/workspace/tree`
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        "Could not load repository file tree."
+      );
+    }
+
+    const data = await response.json();
+    setTree(data);
+  }, []);
+
+  const checkRepositoryStatus = useCallback(async () => {
     try {
       const response = await fetch(
         `${API_BASE}/api/repository/status`
@@ -59,12 +138,64 @@ function App() {
 
       if (data.ready) {
         setRepository(data.repository);
+        setRepositoryKey(data.repository_key);
         await loadWorkspaceTree();
+        await loadRepositoryProfile();
+      } else {
+        setRepository(null);
+        setRepositoryKey(null);
+        setRepositoryProfile(null);
       }
     } catch (err) {
       setError(err.message);
     }
-  }
+  }, [loadRepositoryProfile, loadWorkspaceTree]);
+
+  useEffect(() => {
+    checkRepositoryStatus();
+  }, [checkRepositoryStatus]);
+
+  useEffect(() => {
+    let timer;
+    let cancelled = false;
+
+    async function refreshIndexStatus() {
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/index/status`
+        );
+        if (!response.ok) {
+          throw new Error("Could not check index status.");
+        }
+
+        const data = await response.json();
+        if (cancelled) {
+          return;
+        }
+        setIndexStatus(data);
+
+        if (["queued", "cloning", "indexing"].includes(data.status)) {
+          timer = setTimeout(refreshIndexStatus, 1200);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message);
+        }
+      }
+    }
+
+    refreshIndexStatus();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [repository, ingesting, indexStatus.status]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [messages]);
 
   async function ingestRepository(event) {
     event.preventDefault();
@@ -72,9 +203,25 @@ function App() {
     if (!githubUrl.trim()) {
       return;
     }
+    if (isStreaming) {
+      setError("Wait for the current assistant response before replacing the repository.");
+      return;
+    }
+    if (
+      repository &&
+      !window.confirm(
+        `Replace ${repository}? Its local clone and local-only editor changes will be removed after the new repository indexes successfully. If indexing fails, the current repository stays active.`
+      )
+    ) {
+      return;
+    }
 
     setError("");
     setIngesting(true);
+    setIndexStatus({
+      status: "cloning",
+      message: "Cloning the repository. Your current workspace stays active until indexing succeeds.",
+    });
 
     try {
       const response = await fetch(
@@ -99,39 +246,42 @@ function App() {
       }
 
       setRepository(data.repository);
+      setRepositoryKey(data.repository_key);
       setMessages([]);
       setSelectedFile(null);
       setFileContent("");
+      setSavedContent("");
+      setShowReplaceForm(false);
+      setIndexStatus({
+        status: "ready",
+        message: data.cleanup_warning
+          ? `Repository ready. Previous index cleanup is pending: ${data.cleanup_warning}`
+          : "Repository indexed and ready.",
+      });
 
       await loadWorkspaceTree();
+      await loadRepositoryProfile();
     } catch (err) {
       setError(err.message);
+      setIndexStatus({
+        status: "error",
+        message: `Repository replacement failed. The previous workspace remains active. ${err.message}`,
+      });
     } finally {
       setIngesting(false);
     }
   }
 
-  async function loadWorkspaceTree() {
-    const response = await fetch(
-      `${API_BASE}/api/workspace/tree`
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        "Could not load repository file tree."
-      );
+  async function openFile(path, line = 1) {
+    if (isDirty && !window.confirm("Discard unsaved changes and open another file?")) {
+      return;
     }
 
-    const data = await response.json();
-    setTree(data);
-  }
-
-  async function openFile(path) {
     try {
       setError("");
 
       const response = await fetch(
-        `${API_BASE}/api/workspace/file/${encodeURI(path)}`
+        `${API_BASE}/api/workspace/file/${encodePath(path)}`
       );
 
       const data = await response.json();
@@ -144,18 +294,61 @@ function App() {
 
       setSelectedFile(path);
       setFileContent(data.content);
+      setSavedContent(data.content);
       setCursorPosition({
         line: 1,
         column: 1,
       });
       setSelectedCode("");
+      const target = { path, line: Math.max(1, Number(line) || 1) };
+      navigationTargetRef.current = target;
+      setNavigationTarget(target);
+      if (page !== "editor") {
+        navigate("editor");
+      }
     } catch (err) {
       setError(err.message);
     }
   }
 
-  function handleEditorMount(editor) {
+  useEffect(() => {
+    if (
+      page !== "editor"
+      || !navigationTarget
+      || selectedFile !== navigationTarget.path
+      || !editorRef.current
+    ) {
+      return;
+    }
+    const editor = editorRef.current;
+    const line = Math.min(
+      Math.max(1, navigationTarget.line),
+      editor.getModel()?.getLineCount() || navigationTarget.line,
+    );
+    editor.revealLineInCenter(line);
+    editor.setPosition({ lineNumber: line, column: 1 });
+    editor.focus();
+    navigationTargetRef.current = null;
+    setNavigationTarget(null);
+  }, [fileContent, navigationTarget, page, selectedFile]);
+
+  function handleEditorMount(editor, monaco) {
     editorRef.current = editor;
+    const target = navigationTargetRef.current;
+    if (target && target.path === selectedFile) {
+      const line = Math.min(
+        Math.max(1, target.line),
+        editor.getModel()?.getLineCount() || target.line,
+      );
+      editor.revealLineInCenter(line);
+      editor.setPosition({ lineNumber: line, column: 1 });
+      navigationTargetRef.current = null;
+      setNavigationTarget(null);
+    }
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+      () => saveFileRef.current?.()
+    );
 
     editor.onDidChangeCursorPosition((event) => {
       setCursorPosition({
@@ -186,6 +379,45 @@ function App() {
       }
     });
   }
+
+  async function saveFile() {
+    if (!selectedFile || fileContent === savedContent || saving) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/workspace/file/${encodePath(selectedFile)}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            content: fileContent,
+            repository_key: repositoryKey,
+          }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Could not save file.");
+      }
+
+      setSavedContent(data.content);
+      setIndexStatus({
+        status: "queued",
+        message: "File saved. Updating the semantic, keyword, and graph indexes in the background.",
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+  saveFileRef.current = saveFile;
 
   async function askAssistant(event) {
     event?.preventDefault();
@@ -320,6 +552,29 @@ function App() {
     }
   }
 
+  const isDirty = fileContent !== savedContent;
+
+  function editorLanguage(path) {
+    const extension = path?.split(".").pop()?.toLowerCase();
+    const languages = {
+      py: "python",
+      js: "javascript",
+      jsx: "javascript",
+      ts: "typescript",
+      tsx: "typescript",
+      json: "json",
+      html: "html",
+      css: "css",
+      scss: "scss",
+      md: "markdown",
+      sql: "sql",
+      yaml: "yaml",
+      yml: "yaml",
+      sh: "shell",
+    };
+    return languages[extension] || "plaintext";
+  }
+
   function renderTreeEntry(entry) {
     if (entry.type === "directory") {
       return (
@@ -357,46 +612,136 @@ function App() {
     );
   }
 
-  if (!repository) {
+  if (page === "home" || !repository) {
     return (
-      <div className="landing-page">
-        <div className="landing-card">
-          <h1>Project RACA</h1>
+      <div className="home-page">
+        <header className="home-topbar">
+          <div className="home-brand"><span className="brand-mark">R</span><strong>RACA</strong></div>
+          <span className="home-product-label">Repository intelligence workspace</span>
+        </header>
+        <main className="home-content">
+          <section className="home-hero">
+            <div className="home-hero-copy">
+              <span className="eyebrow">YOUR CODEBASE, UNDERSTOOD</span>
+              <h1>Build with context.</h1>
+              <p>Navigate, investigate, and understand your repository with grounded code intelligence.</p>
+            </div>
+            <img className="home-hero-art" src={heroArt} alt="" />
+          </section>
 
-          <p>
-            Repository-Aware AI Coding Assistant
-          </p>
-
-          <form
-            onSubmit={ingestRepository}
-            className="repository-form"
-          >
-            <input
-              type="url"
-              placeholder="https://github.com/owner/repository"
-              value={githubUrl}
-              onChange={(event) =>
-                setGithubUrl(event.target.value)
-              }
-              disabled={ingesting}
-            />
-
-            <button
-              type="submit"
-              disabled={ingesting}
-            >
-              {ingesting
-                ? "Ingesting..."
-                : "Open Repository"}
-            </button>
-          </form>
-
-          {error && (
-            <div className="error-message">
-              {error}
+          <section className="repository-summary">
+            <div className="repository-summary-main">
+              <span className={`status-dot ${repository ? "ready" : ""}`} />
+              <div>
+                <span className="summary-label">ACTIVE REPOSITORY</span>
+                <h2>{repository || "No repository connected"}</h2>
+                {repositoryProfile?.url && (
+                  <a href={repositoryProfile.url} target="_blank" rel="noreferrer">{repositoryProfile.url}</a>
+                )}
+                {repositoryProfile?.description && <p>{repositoryProfile.description}</p>}
+                {!repository && <p>Connect a GitHub repository to open the editor and analysis tools.</p>}
+              </div>
+            </div>
+            <div className="repository-summary-side">
+              <span className="repository-status">{repository ? indexStatusLabel(indexStatus.status) : "not connected"}</span>
+              {repositoryProfile?.file_count !== undefined && (
+                <span>{repositoryProfile.file_count.toLocaleString()} files</span>
+              )}
+              {repository && <span>{repositoryProfile?.url ? "GitHub" : "Local repository"}</span>}
+            </div>
+          </section>
+          {ingesting && (
+            <div className="home-progress" role="status">
+              <span className="progress-spinner" />
+              <div><strong>{indexStatus.status === "indexing" ? "Indexing repository" : "Preparing repository"}</strong><p>{indexStatus.message}</p></div>
             </div>
           )}
-        </div>
+          {error && <div className="error-message">{error}</div>}
+
+          <section className="home-actions">
+            <div className="home-section-heading">
+              <div><span className="eyebrow">WORKSPACE</span><h2>What would you like to do?</h2></div>
+              <button className="replace-action" onClick={() => { setError(""); setShowReplaceForm(true); }}>
+                {repository ? "Replace repository" : "Connect repository"}
+              </button>
+            </div>
+            <div className="action-grid">
+              <button className="action-card editor-action" disabled={!repository} onClick={() => navigate("editor")}>
+                <span className="action-icon">⌘</span><span className="action-title">Open editor</span>
+                <span className="action-description">Explore and edit files with the RACA assistant by your side.</span>
+                <span className="action-arrow">↗</span>
+              </button>
+              <button className="action-card" disabled={!repository} onClick={() => navigate("understanding")}>
+                <span className="action-icon">◈</span><span className="action-title">Repository understanding</span>
+                <span className="action-description">Explore architecture, project structure, and module relationships.</span>
+                <span className="action-arrow">↗</span>
+              </button>
+              <button className="action-card" disabled={!repository} onClick={() => navigate("navigation")}>
+                <span className="action-icon">⌕</span><span className="action-title">Code navigation</span>
+                <span className="action-description">Find definitions, function usages, and configuration files.</span>
+                <span className="action-arrow">↗</span>
+              </button>
+              <button className="action-card" disabled={!repository} onClick={() => navigate("bugs")}>
+                <span className="action-icon">⌁</span><span className="action-title">Bug investigation &amp; improvements</span>
+                <span className="action-description">Trace errors, investigate likely causes, and review code quality.</span>
+                <span className="action-arrow">↗</span>
+              </button>
+              <button className="action-card replace-card" onClick={() => { setError(""); setShowReplaceForm(true); }}>
+                <span className="action-icon">⇄</span><span className="action-title">{repository ? "Switch repository" : "Add a repository"}</span>
+                <span className="action-description">Stage and validate a GitHub repository before making it active.</span>
+                <span className="action-arrow">↗</span>
+              </button>
+            </div>
+          </section>
+        </main>
+        <footer className="home-footer"><span>RACA · Repository-aware development</span><span>Semantic · Keyword · Graph</span></footer>
+
+        {showReplaceForm && (
+          <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !ingesting) setShowReplaceForm(false);
+          }}>
+            <section className="replace-dialog" role="dialog" aria-modal="true" aria-labelledby="replace-title">
+              <button className="dialog-close" aria-label="Close dialog" disabled={ingesting} onClick={() => setShowReplaceForm(false)}>×</button>
+              <span className="eyebrow">REPOSITORY SOURCE</span>
+              <h2 id="replace-title">{repository ? "Replace active repository" : "Connect a repository"}</h2>
+              <p>Enter a public GitHub repository URL. The current workspace remains active until the new index has been validated.</p>
+              <form onSubmit={ingestRepository} className="repository-form">
+                <input type="url" required placeholder="https://github.com/owner/repository" value={githubUrl} onChange={(event) => setGithubUrl(event.target.value)} disabled={ingesting} />
+                <button type="submit" disabled={ingesting || !githubUrl.trim()}>{ingesting ? "Working…" : "Start indexing"}</button>
+              </form>
+              {ingesting && <div className="index-status" role="status"><span className="progress-spinner" />{indexStatus.message}</div>}
+              {error && <div className="error-message">{error}</div>}
+              {!ingesting && <p className="dialog-footnote">The new repository is activated only after semantic and graph indexes pass validation.</p>}
+            </section>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (page !== "editor") {
+    const titles = {
+      understanding: ["Repository understanding", "A grounded overview of the active codebase."],
+      navigation: ["Code navigation", "Find actual definitions and references in source."],
+      bugs: ["Bug investigation & improvements", "Use repository evidence to explore issues and code quality."],
+    };
+    const [title, subtitle] = titles[page] || titles.understanding;
+    return (
+      <div className="app analysis-app">
+        <header className="topbar analysis-topbar">
+          <div className="brand">
+            <button className="home-back-button" onClick={() => navigate("home")}>← Home</button>
+            <strong>RACA</strong>
+            <span>{repository}</span>
+          </div>
+          <div className="analysis-page-title"><strong>{title}</strong><span>{subtitle}</span></div>
+          <span className={`index-status-indicator ${indexStatus.status}`} title={indexStatus.message}>
+            {indexStatusLabel(indexStatus.status)}
+          </span>
+        </header>
+        {page === "understanding" && <RepositoryUnderstanding request={request} onOpenSource={openFile} />}
+        {page === "navigation" && <CodeNavigation request={request} onOpenSource={openFile} />}
+        {page === "bugs" && <BugInvestigation request={request} onOpenSource={openFile} selectedFile={selectedFile} selectedCode={selectedCode} />}
       </div>
     );
   }
@@ -419,8 +764,23 @@ function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
+          <button className="home-back-button" onClick={() => navigate("home")}>← Home</button>
           <strong>RACA</strong>
           <span>{repository}</span>
+        </div>
+
+        <div className="topbar-actions">
+          <span
+            className={`index-status-indicator ${indexStatus.status}`}
+            title={indexStatus.message}
+            role="status"
+          >
+            {["indexing", "queued", "cloning"].includes(indexStatus.status)
+              ? "Index updating"
+              : indexStatus.status === "error"
+                ? "Index error"
+                : "Index ready"}
+          </span>
         </div>
 
         {error && (
@@ -486,29 +846,34 @@ function App() {
             </span>
 
             {selectedFile && (
+              <>
               <span className="cursor-info">
                 Ln {cursorPosition.line},
                 Col{" "}
                 {cursorPosition.column}
               </span>
+              <button
+                className="save-button"
+                onClick={saveFile}
+                disabled={!isDirty || saving || ingesting}
+                title="Save (Ctrl+S)"
+              >
+                {saving ? "Saving..." : isDirty ? "Save" : "Saved"}
+              </button>
+              </>
             )}
           </div>
 
           <div className="editor-container">
             <Editor
               height="100%"
-              language={
-                selectedFile?.endsWith(
-                  ".py"
-                )
-                  ? "python"
-                  : "plaintext"
-              }
+              language={editorLanguage(selectedFile)}
               value={fileContent}
+              onChange={(value) => setFileContent(value ?? "")}
               onMount={handleEditorMount}
               theme="vs-dark"
               options={{
-                readOnly: true,
+                readOnly: !selectedFile || ingesting,
                 minimap: {
                   enabled: true,
                 },

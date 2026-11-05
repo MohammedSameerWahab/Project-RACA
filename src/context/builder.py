@@ -380,7 +380,7 @@ class ContextBuilder:
 
 
 async def main() -> None:
-    from retrieval.hybrid import HybridRetriever
+    from src.retrieval.hybrid import HybridRetriever
 
     query = input("Enter context query: ").strip()
 

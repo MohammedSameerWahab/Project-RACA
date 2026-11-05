@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.retrieval.graph import graph_search
-from retrieval.keyword import KeywordRetriever
-from retrieval.semantic import SemanticRetriever
+from src.retrieval.keyword import KeywordRetriever
+from src.retrieval.semantic import SemanticRetriever
 
 
 # -------------------------------------------------------------------
@@ -127,6 +127,8 @@ class HybridRetriever:
     def __init__(
         self,
         database_url: str | None = None,
+        repository_key: str | None = None,
+        table_name: str = "raca_code_embeddings",
         semantic_weight: float = DEFAULT_SEMANTIC_WEIGHT,
         keyword_weight: float = DEFAULT_KEYWORD_WEIGHT,
         graph_weight: float = DEFAULT_GRAPH_WEIGHT,
@@ -155,12 +157,17 @@ class HybridRetriever:
             graph_weight / total_weight
         )
 
+        self.repository_key = repository_key
+        self.table_name = table_name
+
         self.semantic_retriever = SemanticRetriever(
-            database_url=database_url
+            database_url=database_url,
+            table_name=table_name,
         )
 
         self.keyword_retriever = KeywordRetriever(
-            database_url=database_url
+            database_url=database_url,
+            table_name=table_name,
         )
 
     # ----------------------------------------------------------------
@@ -231,6 +238,9 @@ class HybridRetriever:
             graph_search(
                 query,
                 top_k=retrieval_k,
+                repository_key=self.repository_key,
+                table_name=self.table_name,
+                database_url=self.semantic_retriever.database_url,
             ),
         )
 

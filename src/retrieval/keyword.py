@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
 import asyncpg
@@ -28,11 +29,15 @@ class KeywordRetriever:
     def __init__(
         self,
         database_url: str | None = None,
+        table_name: str = TABLE_NAME,
     ) -> None:
         self.database_url = (
             database_url
             or os.environ["POSTGRES_URL"]
         )
+        if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", table_name):
+            raise ValueError("Invalid PostgreSQL table name.")
+        self.table_name = table_name
 
     async def search(
         self,
@@ -85,7 +90,7 @@ class KeywordRetriever:
                         ) AS score,
                         start_line,
                         end_line
-                    FROM "{TABLE_NAME}"
+                    FROM "{self.table_name}"
                     WHERE to_tsvector(
                         'english',
                         code

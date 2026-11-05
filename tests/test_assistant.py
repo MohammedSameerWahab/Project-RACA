@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from assistant import RepositoryAssistant
-from workspace import RepositoryWorkspace
+from src.assistant import RepositoryAssistant
+from src.workspace import RepositoryWorkspace
 
 
 def create_test_repository(tmp_path: Path) -> Path:

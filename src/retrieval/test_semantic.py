@@ -1,6 +1,6 @@
 import asyncio
 
-from retrieval.semantic import SemanticRetriever
+from src.retrieval.semantic import SemanticRetriever
 
 
 async def main() -> None:

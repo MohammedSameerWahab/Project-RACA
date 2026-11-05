@@ -1,5 +1,5 @@
-from config import REPOSITORIES_DIR
-from ingestion.github import GitHubRepositoryError, clone_repository
+from src.config import REPOSITORIES_DIR
+from src.ingestion.github import GitHubRepositoryError, clone_repository
 
 def main() -> None:
     github_url = input("Enter the Github Repository URL: ").strip()

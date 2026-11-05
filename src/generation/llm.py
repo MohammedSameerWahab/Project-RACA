@@ -9,9 +9,9 @@ from groq import APIConnectionError
 from groq import APIStatusError
 from groq import RateLimitError
 
-from context.builder import ContextResult
+from src.context.builder import ContextResult, estimate_tokens
 
-from generation.modes import (
+from src.generation.modes import (
     GenerationMode,
     get_mode_instruction,
 )
@@ -224,6 +224,28 @@ class LLMGenerator:
             )
 
         return content.strip()
+
+    async def generate_analysis(
+        self,
+        query: str,
+        verified_context: str,
+        mode: GenerationMode = GenerationMode.EXPLAIN,
+    ) -> str:
+        """Generate an analysis using this generator's existing Groq client."""
+        if not query.strip():
+            raise ValueError("Analysis query cannot be empty.")
+        if not verified_context.strip():
+            raise ValueError("Verified repository context cannot be empty.")
+
+        return await self.generate(
+            ContextResult(
+                query=query,
+                context=verified_context,
+                chunks=[],
+                estimated_tokens=estimate_tokens(verified_context),
+            ),
+            mode=mode,
+        )
 
     # -----------------------------------------------------------------------
     # Streaming generation

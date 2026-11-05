@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
+import stat
+import tempfile
 
 
 class WorkspaceError(RuntimeError):
@@ -38,11 +41,7 @@ class WorkspaceEntry:
 
 
 class RepositoryWorkspace:
-    """
-    Read-only access to the currently active repository.
-
-    This phase deliberately does not allow file modification.
-    """
+    """Read and write safe text files in the active repository."""
 
     IGNORED_DIRECTORIES = {
         ".git",
@@ -157,6 +156,53 @@ class RepositoryWorkspace:
             content=content,
         )
 
+    def write_file(
+        self,
+        relative_path: str,
+        content: str,
+    ) -> WorkspaceFile:
+        root = self._require_repository()
+        file_path = self._resolve_safe_path(relative_path)
+
+        if not file_path.exists() or not file_path.is_file():
+            raise WorkspaceFileError(
+                f"File does not exist: {relative_path}"
+            )
+
+        encoded = content.encode("utf-8")
+        if len(encoded) > self.MAX_FILE_SIZE:
+            raise WorkspaceFileError(
+                f"File is too large to save. Maximum size is "
+                f"{self.MAX_FILE_SIZE} bytes."
+            )
+
+        temporary_path: Path | None = None
+        try:
+            original_mode = stat.S_IMODE(file_path.stat().st_mode)
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=file_path.parent,
+                prefix=".raca-save-",
+                delete=False,
+            ) as temporary_file:
+                temporary_path = Path(temporary_file.name)
+                temporary_file.write(encoded)
+                temporary_file.flush()
+                os.fsync(temporary_file.fileno())
+
+            os.chmod(temporary_path, original_mode)
+            os.replace(temporary_path, file_path)
+        except OSError as exc:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+            raise WorkspaceFileError(
+                f"Could not save file: {relative_path}"
+            ) from exc
+
+        return self.read_file(
+            file_path.relative_to(root).as_posix()
+        )
+
     def _build_tree(
         self,
         directory: Path,
@@ -178,6 +224,9 @@ class RepositoryWorkspace:
             ) from exc
 
         for path in children:
+            if path.is_symlink():
+                continue
+
             if (
                 path.is_dir()
                 and path.name in self.IGNORED_DIRECTORIES

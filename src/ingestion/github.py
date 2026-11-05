@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
@@ -52,7 +53,11 @@ def get_repository_name(url: str) -> str:
         )
     return repository_name
 
-def clone_repository(url: str, repositories_dir: Path,) -> Path:
+def clone_repository(
+    url: str,
+    repositories_dir: Path,
+    destination_name: str | None = None,
+) -> Path:
     """
     Clone a Github repo into the local repositories directory.
 
@@ -62,7 +67,10 @@ def clone_repository(url: str, repositories_dir: Path,) -> Path:
     validate_github_url(url)
 
     repository_name = get_repository_name(url)
-    repository_path = repositories_dir / repository_name
+    directory_name = destination_name or repository_name
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", directory_name):
+        raise GitHubRepositoryError("Invalid clone destination name.")
+    repository_path = repositories_dir / directory_name
 
     if repository_path.exists():
         raise GitHubRepositoryError(
@@ -89,7 +97,8 @@ def clone_repository(url: str, repositories_dir: Path,) -> Path:
 
     except subprocess.CalledProcessError as exc:
         error_message = exc.stderr.strip()
-
+        if repository_path.is_dir():
+            shutil.rmtree(repository_path)
         raise GitHubRepositoryError(
             f"Failed to clone repository: {error_message}"
         ) from exc

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
 import asyncpg
 from pgvector.asyncpg import register_vector
 from cocoindex.ops.sentence_transformers import SentenceTransformerEmbedder
 
-from config import EMBEDDING_MODEL
+from src.config import EMBEDDING_MODEL
 
 
 TABLE_NAME = "raca_code_embeddings"
@@ -32,11 +33,15 @@ class SemanticRetriever:
     def __init__(
         self,
         database_url: str | None = None,
+        table_name: str = TABLE_NAME,
     ) -> None:
         self.database_url = (
             database_url
             or os.environ["POSTGRES_URL"]
         )
+        if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", table_name):
+            raise ValueError("Invalid PostgreSQL table name.")
+        self.table_name = table_name
 
         self.embedder = SentenceTransformerEmbedder(
             EMBEDDING_MODEL
@@ -92,7 +97,7 @@ class SemanticRetriever:
                         embedding <=> $1::vector AS distance,
                         start_line,
                         end_line
-                    FROM "{TABLE_NAME}"
+                    FROM "{self.table_name}"
                     ORDER BY distance ASC
                     LIMIT $2
                     """,

@@ -1,0 +1,330 @@
+.analysis-page {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: clamp(16px, 3vw, 32px);
+  color: #e6edf3;
+}
+
+.analysis-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 auto 18px;
+  max-width: 1080px;
+  overflow-x: auto;
+  border-bottom: 1px solid #30363d;
+}
+
+.analysis-tabs button {
+  flex: 0 0 auto;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #8b949e;
+}
+
+.analysis-tabs button:hover,
+.analysis-tabs button.active {
+  color: #e6edf3;
+}
+
+.analysis-tabs button.active {
+  border-bottom-color: #a371f7;
+}
+
+.analysis-card {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: clamp(18px, 3vw, 28px);
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  background: #11161d;
+}
+
+.analysis-card h2 {
+  margin: 0 0 8px;
+  color: #f0f6fc;
+  font-size: 20px;
+}
+
+.analysis-card h3 {
+  margin: 24px 0 12px;
+  color: #c9d1d9;
+  font-size: 14px;
+}
+
+.analysis-card > p,
+.analysis-card-heading p {
+  margin: 0 0 18px;
+  color: #8b949e;
+  line-height: 1.55;
+}
+
+.analysis-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.analysis-card-heading button,
+.analysis-search button,
+.analysis-form button {
+  flex: 0 0 auto;
+  padding: 9px 13px;
+  border: 1px solid #6e40c9;
+  border-radius: 7px;
+  background: #8957e5;
+  color: white;
+  font-weight: 600;
+}
+
+.analysis-card-heading button:hover,
+.analysis-search button:hover:not(:disabled),
+.analysis-form button:hover:not(:disabled) {
+  background: #a371f7;
+}
+
+.analysis-card button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.analysis-search,
+.analysis-form {
+  display: flex;
+  gap: 10px;
+  margin: 16px 0 22px;
+}
+
+.analysis-search input,
+.analysis-form input,
+.analysis-form textarea,
+.analysis-form select {
+  min-width: 0;
+  flex: 1;
+  padding: 11px 12px;
+  border: 1px solid #30363d;
+  border-radius: 7px;
+  outline: none;
+  background: #0d1117;
+  color: #e6edf3;
+}
+
+.analysis-search input:focus,
+.analysis-form input:focus,
+.analysis-form textarea:focus,
+.analysis-form select:focus {
+  border-color: #8957e5;
+}
+
+.analysis-form {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.analysis-form textarea {
+  min-height: 150px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.analysis-form button {
+  align-self: flex-start;
+}
+
+.analysis-error {
+  margin: 14px 0;
+  padding: 11px 13px;
+  border: 1px solid #f8514966;
+  border-radius: 8px;
+  background: #f8514910;
+  color: #ff7b72;
+}
+
+.analysis-empty {
+  padding: 18px 0;
+  color: #8b949e;
+  text-align: center;
+}
+
+.analysis-note,
+.result-meta {
+  color: #8b949e;
+  font-size: 12px;
+}
+
+.analysis-results {
+  display: grid;
+  gap: 10px;
+}
+
+.analysis-result {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #0d1117;
+}
+
+.result-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.result-heading strong {
+  overflow-wrap: anywhere;
+}
+
+.source-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #a371f7;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.source-link:hover {
+  color: #d2a8ff;
+  text-decoration: underline;
+}
+
+.analysis-result pre {
+  overflow: auto;
+  margin: 12px 0 0;
+  padding: 10px;
+  border-radius: 6px;
+  background: #161b22;
+  color: #c9d1d9;
+  font: 12px/1.5 "Cascadia Code", Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.analysis-markdown {
+  margin: 20px 0;
+  color: #c9d1d9;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.analysis-markdown h1,
+.analysis-markdown h2,
+.analysis-markdown h3 {
+  margin: 20px 0 9px;
+  color: #f0f6fc;
+  font-size: 17px;
+}
+
+.analysis-markdown pre {
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #30363d;
+  border-radius: 7px;
+  background: #0d1117;
+}
+
+.analysis-markdown code {
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+
+.relationship-list,
+.flow-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.relationship-edge,
+.flow-edge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 13px;
+  border: 1px solid #30363d;
+  border-radius: 7px;
+  background: #0d1117;
+  color: #8b949e;
+  font-size: 13px;
+}
+
+.language-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.language-list span,
+.stat-chip {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid #30363d;
+  border-radius: 20px;
+  color: #c9d1d9;
+  font-size: 12px;
+}
+
+.language-list b {
+  color: #a371f7;
+}
+
+.structure-list details {
+  padding: 10px 0;
+  border-bottom: 1px solid #21262d;
+}
+
+.structure-list summary {
+  cursor: pointer;
+  color: #c9d1d9;
+}
+
+.structure-list summary span {
+  margin-left: 8px;
+  color: #8b949e;
+  font-size: 12px;
+}
+
+.structure-list ul {
+  display: grid;
+  gap: 5px;
+  padding-left: 18px;
+}
+
+.stack-summary {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px;
+  border-left: 3px solid #f85149;
+  background: #f8514910;
+}
+
+.stack-summary span {
+  color: #c9d1d9;
+}
+
+@media (max-width: 640px) {
+  .analysis-search {
+    flex-direction: column;
+  }
+
+  .analysis-card-heading {
+    flex-direction: column;
+  }
+
+  .analysis-card-heading button {
+    align-self: flex-start;
+  }
+
+  .result-heading {
+    flex-direction: column;
+  }
+}

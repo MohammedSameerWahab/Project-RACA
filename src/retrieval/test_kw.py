@@ -1,6 +1,6 @@
 import asyncio
 
-from retrieval.keyword import KeywordRetriever
+from src.retrieval.keyword import KeywordRetriever
 
 
 async def main() -> None:

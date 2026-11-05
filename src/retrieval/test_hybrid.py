@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from retrieval.hybrid import HybridRetriever
+from src.retrieval.hybrid import HybridRetriever
 
 
 async def main() -> None:

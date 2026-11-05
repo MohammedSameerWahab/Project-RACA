@@ -14,8 +14,8 @@ from cocoindex.connectors import localfs, neo4j
 from cocoindex.ops.text import detect_code_language
 from cocoindex.resources.file import FileLike, PatternFilePathMatcher
 
-from config import COCOINDEX_GRAPH_DB_PATH
-from models.graph import CodeNode, CodeRelation
+from src.config import COCOINDEX_GRAPH_DB_PATH
+from src.models.graph import CodeNode, CodeRelation
 
 
 # -------------------------------------------------------------------
@@ -25,7 +25,10 @@ from models.graph import CodeNode, CodeRelation
 REPOSITORY_PATH = os.environ["RACA_REPOSITORY_PATH"]
 
 REPOSITORY_DIR = Path(REPOSITORY_PATH).resolve()
-REPOSITORY_NAME = REPOSITORY_DIR.name
+REPOSITORY_NAME = os.environ.get(
+    "RACA_REPOSITORY_KEY",
+    REPOSITORY_DIR.name,
+)
 
 NEO4J_URI = os.environ.get(
     "NEO4J_URI",
@@ -42,6 +45,12 @@ NEO4J_PASSWORD = os.environ["NEO4J_PASSWORD"]
 NEO4J_DATABASE = os.environ.get(
     "NEO4J_DATABASE",
     "raca_graph",
+)
+COCOINDEX_GRAPH_STATE_PATH = Path(
+    os.environ.get(
+        "RACA_COCOINDEX_GRAPH_DB_PATH",
+        str(COCOINDEX_GRAPH_DB_PATH),
+    )
 )
 
 
@@ -263,9 +272,7 @@ async def coco_lifespan(
     Configure CocoIndex state and Neo4j connection.
     """
 
-    builder.settings.db_path = (
-        COCOINDEX_GRAPH_DB_PATH
-    )
+    builder.settings.db_path = COCOINDEX_GRAPH_STATE_PATH
 
     builder.provide(
         KG_DB,
@@ -553,6 +560,35 @@ async def app_main(
         path_matcher=PatternFilePathMatcher(
             included_patterns=[
                 "**/*.py",
+                "**/*.js",
+                "**/*.jsx",
+                "**/*.ts",
+                "**/*.tsx",
+                "**/*.java",
+                "**/*.c",
+                "**/*.h",
+                "**/*.cpp",
+                "**/*.hpp",
+                "**/*.rs",
+                "**/*.go",
+                "**/*.cs",
+                "**/*.rb",
+                "**/*.php",
+                "**/*.swift",
+                "**/*.kt",
+                "**/*.kts",
+                "**/*.scala",
+                "**/*.sh",
+                "**/*.sql",
+                "**/*.html",
+                "**/*.css",
+                "**/*.scss",
+                "**/*.json",
+                "**/*.yaml",
+                "**/*.yml",
+                "**/*.toml",
+                "**/*.md",
+                "**/*.mdx",
             ],
             excluded_patterns=[
                 "**/.git/**",
@@ -581,7 +617,10 @@ async def app_main(
 
 app = coco.App(
     coco.AppConfig(
-        name="RACA_CodeGraph",
+        name=os.environ.get(
+            "RACA_GRAPH_FLOW_NAME",
+            "RACA_CodeGraph",
+        ),
     ),
     app_main,
     lifespan=coco_lifespan,

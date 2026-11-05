@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, AsyncIterator
@@ -17,9 +18,9 @@ from cocoindex.resources.file import FileLike, PatternFilePathMatcher
 from cocoindex.resources.id import IdGenerator
 
 from src.config import (
+    COCOINDEX_DB_PATH,
     CHUNK_OVERLAP,
     CHUNK_SIZE,
-    COCOINDEX_DB_PATH,
     EMBEDDING_MODEL,
     MIN_CHUNK_SIZE,
 )
@@ -33,9 +34,24 @@ DATABASE_URL = os.environ["POSTGRES_URL"]
 REPOSITORY_PATH = os.environ["RACA_REPOSITORY_PATH"]
 
 REPOSITORY_DIR = Path(REPOSITORY_PATH).resolve()
-REPOSITORY_NAME = REPOSITORY_DIR.name
+REPOSITORY_NAME = os.environ.get(
+    "RACA_REPOSITORY_KEY",
+    REPOSITORY_DIR.name,
+)
 
-TABLE_NAME = "raca_code_embeddings"
+TABLE_NAME = os.environ.get(
+    "RACA_POSTGRES_TABLE",
+    "raca_code_embeddings",
+)
+if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", TABLE_NAME):
+    raise ValueError("Invalid PostgreSQL table name.")
+
+COCOINDEX_STATE_PATH = Path(
+    os.environ.get(
+        "RACA_COCOINDEX_DB_PATH",
+        str(COCOINDEX_DB_PATH),
+    )
+)
 
 
 # -------------------------------------------------------------------
@@ -86,7 +102,7 @@ async def coco_lifespan(
     """
 
     # CocoIndex's own internal state database.
-    builder.settings.db_path = COCOINDEX_DB_PATH
+    builder.settings.db_path = COCOINDEX_STATE_PATH
 
     # PostgreSQL connection pool.
     async with asyncpg.create_pool(DATABASE_URL) as pool:
@@ -171,7 +187,7 @@ async def process_chunk(
     table.declare_row(
         row=CodeEmbedding(
             id=await id_generator.next_id(
-                chunk.text
+                f"{relative_path}:{chunk.start.line}:{chunk.end.line}:{chunk.text}"
             ),
             repository=REPOSITORY_NAME,
             filename=str(relative_path),
@@ -217,12 +233,14 @@ async def app_main(
     target_table.declare_sql_command_attachment(
         name="code_fts_idx",
         setup_sql=(
-            'CREATE INDEX IF NOT EXISTS "raca_code_fts_idx" '
-            'ON "raca_code_embeddings" '
+            f'CREATE INDEX IF NOT EXISTS '
+            f'"{os.environ.get("RACA_FTS_INDEX_NAME", "raca_code_fts_idx")}" '
+            f'ON "{TABLE_NAME}" '
             "USING gin (to_tsvector('english', code))"
         ),
         teardown_sql=(
-            'DROP INDEX IF EXISTS "raca_code_fts_idx"'
+            f'DROP INDEX IF EXISTS '
+            f'"{os.environ.get("RACA_FTS_INDEX_NAME", "raca_code_fts_idx")}"'
         ),
     )
 
@@ -290,7 +308,10 @@ async def app_main(
 
 app = coco.App(
     coco.AppConfig(
-        name="RACA_CodeIndex"
+        name=os.environ.get(
+            "RACA_CODE_FLOW_NAME",
+            "RACA_CodeIndex",
+        )
     ),
     app_main,
     sourcedir=REPOSITORY_DIR,
