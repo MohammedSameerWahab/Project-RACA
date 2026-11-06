@@ -657,7 +657,7 @@ function App() {
       <div className="home-page">
         <header className="home-topbar">
           <div className="home-brand"><span className="brand-mark">R</span><strong>RACA</strong></div>
-          <span className="home-product-label">Repository intelligence workspace</span>
+          <span className="home-product-label">REPOSITORY INTELLIGENCE WORKSPACE</span>
         </header>
         <main className="home-content">
           <section className="home-hero">
@@ -761,7 +761,7 @@ function App() {
             </div>
           </section>
         </main>
-        <footer className="home-footer"><span>RACA · Repository-aware development</span><span>Semantic · Keyword · Graph</span></footer>
+        <footer className="home-footer"><span>RACA · REPOSITORY AWARE CODING ASSISTANT</span><span>Semantic · Keyword · Graph</span></footer>
 
         {showReplaceForm && (
           <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
