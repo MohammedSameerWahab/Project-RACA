@@ -76,7 +76,7 @@ function RepositoryUnderstanding({ request, onOpenSource }) {
     try {
       return await request(path, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json",  "ngrok-skip-browser-warning": "true" },
         body: JSON.stringify(body),
       });
     } catch (reason) {
@@ -335,7 +335,7 @@ function BugInvestigation({ request, onOpenSource, selectedFile, selectedCode })
     try {
       const data = await request(path, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json",  "ngrok-skip-browser-warning": "true" },
         body: JSON.stringify(body),
       });
       setResult(data);

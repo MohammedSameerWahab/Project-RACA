@@ -269,6 +269,7 @@ function App() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+             "ngrok-skip-browser-warning": "true"
           },
           body: JSON.stringify({
             github_url: githubUrl.trim(),
@@ -433,6 +434,7 @@ function App() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
+             "ngrok-skip-browser-warning": "true"
           },
           body: JSON.stringify({
             content: fileContent,
@@ -494,6 +496,7 @@ function App() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+             "ngrok-skip-browser-warning": "true"
           },
           body: JSON.stringify({
             query: trimmedQuery,
