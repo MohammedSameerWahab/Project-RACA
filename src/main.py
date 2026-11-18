@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -40,10 +41,13 @@ from src.generation.providers import (
     configured_providers,
     model_options,
 )
+from src.retrieval.semantic import preload_embedding_model
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 class RepositoryIngestRequest(BaseModel):
     github_url: str
@@ -162,6 +166,10 @@ async def _analysis_result(operation):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Loading local embedding model before accepting requests.")
+    await preload_embedding_model()
+    logger.info("Local embedding model is ready.")
+
     try:
         await pipeline.restore_existing_repository()
     except PipelineError as exc:
@@ -206,9 +214,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
+    allow_origins=["*"
+        # "http://localhost:5173",
+        # "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -729,27 +737,27 @@ async def assistant_ask_stream(
             detail=str(exc),
         ) from exc
 
-    try:
-        result = await assistant.ask(
-            query=request.query,
-            file_path=request.file_path,
-            cursor_line=request.cursor_line,
-            cursor_column=request.cursor_column,
-            selected_code=request.selected_code,
-            mode=request.mode,
-            model=request.model,
-        )
-    except AssistantNotReadyError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except LLMGenerationError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
     async def generate():
-        response = result.response
-        for offset in range(0, len(response), 128):
-            yield response[offset : offset + 128]
+        try:
+            # Yield tokens live as the LLM generates them
+            # (Use assistant.stream_ask or assistant.ask_stream based on your AssistantService method name)
+            stream_fn = getattr(assistant, "stream_ask", None) or getattr(assistant, "ask_stream", None)
+            if not stream_fn:
+                raise AttributeError("Assistant implementation has no stream_ask or ask_stream method.")
+
+            async for chunk in stream_fn(
+                query=request.query,
+                file_path=request.file_path,
+                cursor_line=request.cursor_line,
+                cursor_column=request.cursor_column,
+                selected_code=request.selected_code,
+                mode=request.mode,
+                model=request.model,
+            ):
+                yield chunk
+        except (LLMGenerationError, ValueError, AssistantError, AssistantNotReadyError) as exc:
+            logger.error("Streaming generation error: %s", exc)
+            yield f"\n\n**Error:** {exc}"
 
     return StreamingResponse(
         generate(),

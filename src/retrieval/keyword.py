@@ -42,7 +42,7 @@ class KeywordRetriever:
     async def search(
         self,
         query: str,
-        top_k: int = 5,
+        top_k: int = 3,
     ) -> list[KeywordSearchResult]:
         """
         Search repository code using keyword matching.

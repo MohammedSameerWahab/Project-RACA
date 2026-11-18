@@ -76,7 +76,7 @@ function App() {
   const [generationMode, setGenerationMode] = useState("explain");
   const [llmModels, setLlmModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState(
-    () => window.localStorage.getItem("raca.preferredModel") || "groq-qwen"
+    () => window.localStorage.getItem("raca.preferredModel") || "local-qwen2.5-coder-3b"
   );
 
   const [explorerCollapsed, setExplorerCollapsed] = useState(false);
@@ -175,7 +175,7 @@ function App() {
           const currentModel = data.models?.find((model) => model.id === current);
           return currentModel?.configured
             ? current
-            : data.default_model || "groq-qwen";
+            : data.default_model || "local-qwen2.5-coder-3b";
         });
       })
       .catch((err) => {
@@ -696,7 +696,7 @@ function App() {
               <h2 id="model-preference-title">Choose your preferred model</h2>
               <p>
                 {llmModels.some((model) => model.configured)
-                  ? "If it is busy or rate-limited, RACA tries the remaining configured providers in order."
+                  ? "If it is busy or rate-limited, RACA tries the remaining configured models in fallback order."
                   : "Add at least one provider API key to .env to enable model selection."}
               </p>
             </div>
@@ -708,7 +708,7 @@ function App() {
                 onChange={(event) => setSelectedModel(event.target.value)}
                 disabled={isStreaming}
               >
-                {llmModels.length === 0 && <option value="groq-qwen">Loading models…</option>}
+                {llmModels.length === 0 && <option value="local-qwen2.5-coder-3b">Loading models…</option>}
                 {llmModels.map((model) => (
                   <option key={model.id} value={model.id} disabled={!model.configured}>
                     {model.label}{model.configured ? "" : " · not configured"}

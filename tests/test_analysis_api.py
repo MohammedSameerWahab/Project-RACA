@@ -27,6 +27,7 @@ def test_navigation_endpoints_return_actual_repository_results(
     monkeypatch.setattr(main_module, "_navigation_service", lambda: navigation)
     monkeypatch.setattr(main_module.pipeline, "restore_existing_repository", skip_restore)
     monkeypatch.setattr(main_module.pipeline, "close", skip_close)
+    monkeypatch.setattr(main_module, "preload_embedding_model", skip_restore)
 
     with TestClient(main_module.app) as client:
         definition_response = client.get(

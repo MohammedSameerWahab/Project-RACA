@@ -12,6 +12,11 @@ from src.config import EMBEDDING_MODEL
 
 
 TABLE_NAME = "raca_code_embeddings"
+_EMBEDDER = SentenceTransformerEmbedder(EMBEDDING_MODEL)
+
+
+async def preload_embedding_model() -> None:
+    await _EMBEDDER.embed("RACA startup model warm-up.")
 
 
 @dataclass
@@ -43,14 +48,12 @@ class SemanticRetriever:
             raise ValueError("Invalid PostgreSQL table name.")
         self.table_name = table_name
 
-        self.embedder = SentenceTransformerEmbedder(
-            EMBEDDING_MODEL
-        )
+        self.embedder = _EMBEDDER
 
     async def search(
         self,
         query: str,
-        top_k: int = 5,
+        top_k: int = 3,
     ) -> list[SemanticSearchResult]:
         """
         Search the codebase using semantic similarity.

@@ -57,6 +57,9 @@ class AssistantResult:
 # Assistant
 # ---------------------------------------------------------------------------
 
+_SMALL_TALK = frozenset({
+    "hi", "hey", "hello", "yo", "sup", "thanks", "thank you", "ok", "okay"
+})
 
 class RepositoryAssistant:
     """
@@ -73,7 +76,7 @@ class RepositoryAssistant:
         LLM generation
     """
 
-    MAX_HISTORY_MESSAGES = 10
+    MAX_HISTORY_MESSAGES = 4
 
     def __init__(
         self,
@@ -91,8 +94,8 @@ class RepositoryAssistant:
         )
 
         self.context_builder = ContextBuilder(
-            max_context_tokens=4000,
-            max_chunk_tokens=1000,
+            max_context_tokens=1500,
+            max_chunk_tokens=500,
         )
 
         # Created once and reused for the application session.
@@ -228,7 +231,19 @@ class RepositoryAssistant:
             raise AssistantNotReadyError(
                 "No repository is currently active."
             )
-
+        
+        normalized = query.strip().lower().rstrip("!.?")
+        if not file_path and not selected_code and normalized in _SMALL_TALK:
+            return (
+                ContextResult(
+                    query=query,
+                    context="",
+                    chunks=[],
+                    estimated_tokens=0,
+                ),
+                None,
+            )
+        
         cursor_context = self._build_cursor_context(
             file_path=file_path,
             cursor_line=cursor_line,
@@ -243,8 +258,8 @@ class RepositoryAssistant:
 
         results = await self.retriever.search(
             retrieval_query,
-            top_k=10,
-            retrieval_k=20,
+            top_k=5,
+            retrieval_k=10,
         )
 
         context_result = self.context_builder.build(
@@ -256,6 +271,7 @@ class RepositoryAssistant:
             context_result,
             cursor_context,
         )
+
 
         return context_result, cursor_context
 
@@ -301,12 +317,12 @@ class RepositoryAssistant:
 
             start = max(
                 0,
-                cursor_index - 20,
+                cursor_index - 10,
             )
 
             end = min(
                 len(lines),
-                cursor_index + 21,
+                cursor_index + 11,
             )
 
             surrounding: list[str] = []
@@ -401,9 +417,9 @@ class RepositoryAssistant:
         editor_context = "\n".join(sections)
 
         combined_context = (
-            editor_context
-            + "\n\n"
-            + context_result.context
+            f"{context_result.context}\n\n{editor_context}"
+            if context_result.context
+            else editor_context
         )
 
         return ContextResult(

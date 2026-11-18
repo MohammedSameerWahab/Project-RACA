@@ -197,7 +197,7 @@ class FakeRetriever:
 def test_likely_bug_locations_use_hybrid_evidence(tmp_path: Path) -> None:
     workspace, repository, navigation = services(tmp_path)
     service = InvestigationService(
-        repository, navigation, FakeRetriever(), FakeLLM(), model="groq-qwen"
+        repository, navigation, FakeRetriever(), FakeLLM(), model="gemini-3.8-flash"
     )
 
     result = asyncio.run(service.investigate_bug("Task fails on execution"))
@@ -211,7 +211,7 @@ def test_likely_bug_locations_use_hybrid_evidence(tmp_path: Path) -> None:
 def test_file_scoped_improvements_use_source_context(tmp_path: Path) -> None:
     workspace, repository, navigation = services(tmp_path)
     service = InvestigationService(
-        repository, navigation, FakeRetriever(), FakeLLM(), model="groq-qwen"
+        repository, navigation, FakeRetriever(), FakeLLM(), model="gemini-3.8-flash"
     )
 
     result = asyncio.run(
@@ -228,7 +228,7 @@ def test_stack_trace_response_does_not_expose_external_paths(
 ) -> None:
     workspace, repository, navigation = services(tmp_path)
     service = InvestigationService(
-        repository, navigation, FakeRetriever(), FakeLLM(), model="groq-qwen"
+        repository, navigation, FakeRetriever(), FakeLLM(), model="gemini-3.8-flash"
     )
 
     async def no_graph_neighbors(locations):
@@ -358,7 +358,7 @@ def test_execution_flow_uses_indexed_call_edges(
         lambda *args, **kwargs: driver,
     )
     service = InvestigationService(
-        repository, navigation, FakeRetriever(), FakeLLM(), model="groq-qwen"
+        repository, navigation, FakeRetriever(), FakeLLM(), model="gemini-3.8-flash"
     )
 
     result = asyncio.run(service.execution_flow("run_task"))

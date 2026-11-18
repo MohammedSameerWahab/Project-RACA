@@ -3,8 +3,11 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 
-from openai import AsyncOpenAI
-from openai import APIConnectionError, APIStatusError
+import inspect
+from typing import AsyncIterator
+
+import httpx
+from openai import APIConnectionError, APIStatusError, AsyncOpenAI
 
 from src.context.builder import ContextResult, estimate_tokens
 from src.generation.modes import GenerationMode, get_mode_instruction
@@ -12,6 +15,7 @@ from src.generation.providers import (
     DEFAULT_MODEL,
     PROVIDERS_BY_ID,
     ModelProvider,
+    configured_providers,
 )
 
 logger = logging.getLogger(__name__)
@@ -19,60 +23,26 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 DEFAULT_TEMPERATURE = 1.0
 DEFAULT_TOP_P = 0.95
+DEFAULT_TIMEOUT = httpx.Timeout(45.0, connect=10.0)
+LOCAL_TIMEOUT = httpx.Timeout(
+    connect=10.0,
+    read=180.0,
+    write=30.0,
+    pool=10.0,
+)
 
 SYSTEM_PROMPT = """
-You are RACA, a repository-aware coding assistant.
+You are RACA, a repository-aware coding assistant. Solve the user's query using the supplied repository context as your primary source of truth and conversation history for prior references.
 
-Your task is to answer software-development questions using the
-repository context supplied with the user's query.
-
-The repository context is the primary source of truth for
-repository-specific questions.
-
-Follow these rules:
-
-1. Use the supplied repository context when answering questions
-   about the repository.
-
-2. Do not invent files, functions, classes, variables, APIs,
-   configuration values, or implementation details that are not
-   supported by the supplied repository context.
-
-3. If the repository context is insufficient to answer a
-   repository-specific question, clearly say that the available
-   context is insufficient.
-
-4. Distinguish between:
-   - facts that are present in the repository,
-   - reasonable explanations of the existing code,
-   - and suggestions for modifying or improving the code.
-
-5. When explaining code, refer to the relevant file names and
-   line ranges from the supplied context when useful.
-
-6. When the user asks for a code change, provide a practical
-   implementation and explain where it should be applied.
-
-7. Preserve the existing architecture and technologies unless
-   the user explicitly asks for a redesign.
-
-8. Do not claim that you inspected repository files that are not
-   present in the supplied context.
-
-9. Be technically precise and concise, but provide enough
-   explanation for the user to understand the solution.
-
-10. Treat the user's actual question as the task to solve.
-
-11. Use standard Markdown when formatting your response.
-    Use fenced code blocks with triple backticks and an optional
-    language identifier such as ```python.
-
-12. When the user refers to something discussed earlier in the
-    conversation, use the previous conversation messages supplied
-    in the conversation history.
+Rules:
+1. Ground repository answers strictly in the supplied context. Never invent files, functions, classes, variables, APIs, configs, or implementation details, and never claim to inspect unprovided files.
+2. If context is insufficient, state so clearly.
+3. Clearly distinguish repository facts, code explanations, and modification suggestions.
+4. Cite relevant file names and line ranges from context when helpful.
+5. For code changes, provide practical implementations, specify where to apply them, and preserve existing architecture/technologies unless a redesign is requested.
+6. Be technically precise, concise, and clear.
+7. Format responses in standard Markdown using language-tagged fenced code blocks (e.g., ```python).
 """.strip()
-
 
 class LLMGenerationError(RuntimeError):
     """Raised when all configured LLM providers fail to generate a response."""
@@ -103,7 +73,14 @@ class LLMGenerator:
         self.max_output_tokens = max_output_tokens
         self.temperature = temperature
         self.top_p = top_p
-        self._clients: dict[str, AsyncOpenAI] = {}
+        # Keyed by (base_url, api_key) so models sharing a provider endpoint
+        # reuse the same warm HTTP connection pool.
+        self._clients: dict[tuple[str, str], AsyncOpenAI] = {}
+
+    def warmup(self) -> None:
+        """Pre-initialize HTTP clients for all configured providers."""
+        for provider in configured_providers():
+            self._client_for(provider)
 
     async def generate(
         self,
@@ -151,12 +128,33 @@ class LLMGenerator:
         if not context_result.query.strip():
             raise ValueError("ContextResult query cannot be empty.")
 
-        response = await self._generate_response(
-            self._build_messages(context_result, history, mode),
-            model or self.model,
-        )
-        for offset in range(0, len(response), 128):
-            yield response[offset : offset + 128]
+        messages = self._build_messages(context_result, history, mode)
+        async for chunk in self._stream_response(messages, model or self.model):
+            yield chunk
+
+    async def stream_analysis(
+        self,
+        query: str,
+        verified_context: str,
+        mode: GenerationMode = GenerationMode.EXPLAIN,
+        model: str | None = None,
+    ) -> AsyncIterator[str]:
+        if not query.strip():
+            raise ValueError("Analysis query cannot be empty.")
+        if not verified_context.strip():
+            raise ValueError("Verified repository context cannot be empty.")
+
+        async for chunk in self.stream_generate(
+            ContextResult(
+                query=query,
+                context=verified_context,
+                chunks=[],
+                estimated_tokens=estimate_tokens(verified_context),
+            ),
+            mode=mode,
+            model=model,
+        ):
+            yield chunk
 
     async def _generate_response(
         self,
@@ -184,16 +182,113 @@ class LLMGenerator:
                     max_tokens=self.max_output_tokens,
                     stream=False,
                 )
+                if not response.choices:
+                    raise ValueError("Provider returned no completion choices.")
                 content = response.choices[0].message.content
                 if not content or not content.strip():
                     raise ValueError("Provider returned an empty response.")
+                logger.info(
+                    "Generated response with model %s (%s).",
+                    provider.id,
+                    provider.model,
+                )
                 return content.strip()
             except Exception as exc:
                 reason = self._failure_reason(exc)
                 failures.append(f"{provider.label}: {reason}")
                 logger.warning(
-                    "LLM provider %s failed (%s); trying the next configured provider.",
+                    "LLM model %s (%s) failed with %s; trying the next "
+                    "configured model.",
                     provider.id,
+                    provider.model,
+                    reason,
+                )
+
+        raise LLMGenerationError(
+            "All configured LLM providers failed. " + "; ".join(failures)
+        )
+
+
+
+    async def _stream_response(
+        self,
+        messages: list[dict[str, str]],
+        preferred_model: str,) -> AsyncIterator[str]:
+        if preferred_model not in PROVIDERS_BY_ID:
+            raise ValueError(f"Unknown LLM model selection: {preferred_model!r}.")
+
+        providers = self._fallback_order(preferred_model)
+        if not providers:
+            raise LLMGenerationError(
+                "No LLM providers are configured. Add provider API keys to .env."
+            )
+
+        failures: list[str] = []
+        for provider in providers:
+            yielded_any = False
+            try:
+                client = self._client_for(provider)
+                stream = await client.chat.completions.create(
+                    model=provider.model,
+                    messages=messages,
+                    temperature=self.temperature,
+                    top_p=self.top_p,
+                    max_tokens=self.max_output_tokens,
+                    stream=True,
+                )
+                try:
+                    async for chunk in stream:
+                        if not chunk.choices:
+                            continue
+                        delta = chunk.choices[0].delta
+                        if delta is None or not delta.content:
+                            continue
+
+                        text = delta.content
+                        if not yielded_any:
+                            # Strip leading whitespace on initial chunk without dropping the yield flag
+                            text = text.lstrip()
+                            yielded_any = True
+                            logger.info(
+                                "Streaming response with model %s (%s).",
+                                provider.id,
+                                provider.model,
+                            )
+                            if not text:
+                                continue
+                        yield text
+                finally:
+                    # Prioritize asynchronous cleanup (.aclose) over synchronous (.close)
+                    if hasattr(stream, "aclose"):
+                        await stream.aclose()
+                    elif hasattr(stream, "close"):
+                        res = stream.close()
+                        if inspect.isawaitable(res):
+                            await res
+
+                if not yielded_any:
+                    raise ValueError("Provider returned an empty response.")
+                return
+            except Exception as exc:
+                reason = self._failure_reason(exc)
+                if yielded_any:
+                    logger.error(
+                        "LLM model %s (%s) stream interrupted after partial "
+                        "output: %s",
+                        provider.id,
+                        provider.model,
+                        reason,
+                    )
+                    raise LLMGenerationError(
+                        f"{provider.label} stream interrupted: {reason}"
+                    ) from exc
+
+                failures.append(f"{provider.label}: {reason}")
+                logger.warning(
+                    "LLM model %s (%s) failed with %s; trying the next "
+                    "configured model.",
+                    provider.id,
+                    provider.model,
                     reason,
                 )
 
@@ -202,21 +297,27 @@ class LLMGenerator:
         )
 
     def _client_for(self, provider: ModelProvider) -> AsyncOpenAI:
-        client = self._clients.get(provider.id)
-        if client is not None:
-            return client
-
         credentials = provider.credentials()
         if credentials is None:
             raise ValueError(f"{provider.label} is not configured.")
         api_key, base_url = credentials
+        cache_key = (base_url, api_key)
+
+        client = self._clients.get(cache_key)
+        if client is not None:
+            return client
+
         client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,
             max_retries=0,
-            timeout=45.0,
+            timeout=(
+                LOCAL_TIMEOUT
+                if provider.id == "local-qwen2.5-coder-3b"
+                else DEFAULT_TIMEOUT
+            ),
         )
-        self._clients[provider.id] = client
+        self._clients[cache_key] = client
         return client
 
     @staticmethod
@@ -234,13 +335,18 @@ class LLMGenerator:
 
     @staticmethod
     def _failure_reason(exc: Exception) -> str:
+        detail = str(exc).strip()
         if isinstance(exc, APIStatusError):
-            return f"API returned HTTP {exc.status_code}"
+            error = f"{type(exc).__name__} (HTTP {exc.status_code})"
+        else:
+            error = type(exc).__name__
+        if detail:
+            return f"{error}: {detail}"
         if isinstance(exc, APIConnectionError):
-            return "connection failed"
+            return f"{error}: provider connection failed without further detail."
         if isinstance(exc, ValueError):
-            return str(exc)
-        return type(exc).__name__
+            return f"{error}: invalid provider response."
+        return f"{error}: no additional error detail."
 
     @staticmethod
     def _build_messages(

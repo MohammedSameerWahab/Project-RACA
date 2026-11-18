@@ -42,18 +42,29 @@ CocoIndex state are retired.
 
 ## LLM providers
 
-Choose a preferred model from the home page. RACA tries that provider first, then
-walks the provider list in the displayed order, skipping providers without credentials
-and falling over to the next provider after an API error. All providers use the
-OpenAI-compatible Python SDK through a shared generation layer. The same selection
-is used by the assistant and generated repository analyses.
+Choose a preferred model from the home page. RACA tries that model first, then
+walks the ordered model list, skipping models without credentials and falling back
+to the next configured model after an API error. The backend logs the failure type
+and details for each failed model, followed by the model used for a successful
+response. All providers use the OpenAI-compatible Python SDK through a shared
+generation layer. The same selection is used by the assistant and generated
+repository analyses.
 
-Supported selections are Groq Qwen 3 32B, Google Gemini 3.1 Flash-Lite, NVIDIA
-Llama 3.3 70B, Z.AI GLM-4.5-Flash, and Cloudflare Llama 3.1 8B. Configure
-the corresponding `GROQ_API_KEY`, `GOOGLE_API_KEY`, `NVIDEA_API_KEY`, `GLM_API_KEY`,
-and `CLOUDFLARE_API_KEY` values in `.env`. Cloudflare Workers AI also requires
-`CLOUDFLARE_ACCOUNT_ID`. The selector marks providers without required configuration
+Supported selections, in fallback order, are Google Gemini 3.8 Flash, Groq Qwen 3.8
+27B, Google Gemma 4 31B IT, Groq GPT-OSS 120B, Cloudflare Qwen 2.5 Coder 32B
+Instruct, Google Gemini 4 Argon, Groq Qwen 3 32B, Google Gemma 4 26B A4B IT,
+Cloudflare Qwen 3.8 27B, Groq GPT-OSS 20B, Cloudflare DeepSeek R1 Distill Qwen
+32B, Groq Llama 3.3 70B Versatile, Cloudflare Qwen 3 30B A3B FP8, NVIDIA NIM
+DeepSeek V4.1 Flash, NVIDIA NIM Nemotron 3.5 Super VL 120B A12B, and NVIDIA NIM
+Nemotron 3.5 Lightning 30B A3B. Configure `GOOGLE_API_KEY`, `GROQ_API_KEY`,
+`CLOUDFLARE_API_KEY`, and `NVIDIA_API_KEY` (or the previously documented
+`NVIDEA_API_KEY`) in `.env`. Cloudflare Workers AI also requires
+`CLOUDFLARE_ACCOUNT_ID`. The selector marks models without required configuration
 as unavailable.
+
+The local sentence-embedding model is loaded during FastAPI startup and reused for
+retrieval. Provider-hosted generation models remain remote and are invoked through
+their APIs; their weights are not loaded into the RACA backend.
 
 These are intended for the providers' free/developer tiers, but quotas, model IDs,
 and eligibility can change by account and region. Provider usage limits still apply;

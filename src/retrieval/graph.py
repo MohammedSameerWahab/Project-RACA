@@ -429,8 +429,8 @@ async def graph_search(
             query_terms,
         )
         # print(f"DEBUG: Neo4j returned {len(graph_records)} records.")
-        if graph_records:
-            print(f"DEBUG: First Neo4j record file_path: {graph_records[0].get('file_path')}")
+        # if graph_records:
+        #     print(f"DEBUG: First Neo4j record file_path: {graph_records[0].get('file_path')}")
 
         results = await fetch_chunks_for_nodes(
             pool,
@@ -468,7 +468,7 @@ async def main() -> None:
 
     results = await graph_search(
         query,
-        top_k=10,
+        top_k=5,
     )
 
     if not results:
