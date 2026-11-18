@@ -7,11 +7,23 @@ import {
   CodeNavigation,
   RepositoryUnderstanding,
 } from "./AnalysisPages";
+import Layout, { applyTheme, getStoredTheme } from "./Layout";
+import { AboutPage, ContactPage, TeamPage } from "./SitePages";
 import heroArt from "./assets/hero.png";
 import "./App.css";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
-const PAGES = new Set(["home", "editor", "understanding", "navigation", "bugs"]);
+const PAGES = new Set([
+  "home",
+  "editor",
+  "understanding",
+  "navigation",
+  "bugs",
+  "about",
+  "team",
+  "contact",
+]);
+const COMPACT_PAGES = new Set(["editor", "understanding", "navigation", "bugs"]);
 
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, options);
@@ -81,6 +93,7 @@ function App() {
 
   const [explorerCollapsed, setExplorerCollapsed] = useState(false);
   const [assistantCollapsed, setAssistantCollapsed] = useState(false);
+  const [theme, setTheme] = useState(() => getStoredTheme());
 
   const editorRef = useRef(null);
   const chatEndRef = useRef(null);
@@ -103,9 +116,37 @@ function App() {
       const requested = window.location.hash.slice(1);
       setPage(PAGES.has(requested) ? requested : "home");
     }
+    function syncTheme(event) {
+      const next = event.detail || getStoredTheme();
+      setTheme(next);
+    }
+    applyTheme(getStoredTheme());
     window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
+    window.addEventListener("raca-theme", syncTheme);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("raca-theme", syncTheme);
+    };
   }, []);
+
+  // Scroll-reveal: watch .scroll-reveal elements and add .visible when they enter the viewport
+  useEffect(() => {
+    const targets = document.querySelectorAll(".scroll-reveal:not(.visible)");
+    if (!targets.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12 }
+    );
+    targets.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  });
 
   const loadRepositoryProfile = useCallback(async () => {
     try {
@@ -655,24 +696,42 @@ function App() {
     );
   }
 
+  const shell = (content, compact = COMPACT_PAGES.has(page) && Boolean(repository)) => (
+    <Layout page={page} onNavigate={navigate} repository={repository} compact={compact}>
+      {content}
+    </Layout>
+  );
+
+  if (page === "about") {
+    return shell(<AboutPage />);
+  }
+  if (page === "team") {
+    return shell(<TeamPage />);
+  }
+  if (page === "contact") {
+    return shell(<ContactPage />);
+  }
+
   if (page === "home" || !repository) {
-    return (
+    return shell(
       <div className="home-page">
-        <header className="home-topbar">
-          <div className="home-brand"><span className="brand-mark">R</span><strong>RACA</strong></div>
-          <span className="home-product-label">REPOSITORY INTELLIGENCE WORKSPACE</span>
-        </header>
         <main className="home-content">
-          <section className="home-hero">
+
+          {/* ── Hero ── */}
+          <section className="home-hero scroll-reveal visible">
             <div className="home-hero-copy">
               <span className="eyebrow">YOUR CODEBASE, UNDERSTOOD</span>
               <h1>Build with context.</h1>
-              <p>Navigate, investigate, and understand your repository with grounded code intelligence.</p>
+              <p>
+                Navigate, investigate, and understand any GitHub repository
+                with an assistant that reads the actual source — not guesses.
+              </p>
             </div>
             <img className="home-hero-art" src={heroArt} alt="" />
           </section>
 
-          <section className="repository-summary">
+          {/* ── Repository status + model ── */}
+          <section className="repository-summary scroll-reveal">
             <div className="repository-summary-main">
               <span className={`status-dot ${repository ? "ready" : ""}`} />
               <div>
@@ -693,13 +752,14 @@ function App() {
               {repository && <span>{repositoryProfile?.url ? "GitHub" : "Local repository"}</span>}
             </div>
           </section>
-          <section className="model-preference" aria-labelledby="model-preference-title">
+
+          <section className="model-preference scroll-reveal" aria-labelledby="model-preference-title">
             <div className="model-preference-copy">
               <span className="eyebrow">ASSISTANT MODEL</span>
-              <h2 id="model-preference-title">Choose your preferred model</h2>
+              <h2 id="model-preference-title">Pick your preferred model</h2>
               <p>
                 {llmModels.some((model) => model.configured)
-                  ? "If it is busy or rate-limited, RACA tries the remaining configured models in fallback order."
+                  ? "If the selected model is busy or rate-limited, RACA falls back through the remaining configured models automatically."
                   : "Add at least one provider API key to .env to enable model selection."}
               </p>
             </div>
@@ -720,51 +780,161 @@ function App() {
               </select>
             </label>
           </section>
+
           {ingesting && (
             <div className="home-progress" role="status">
               <span className="progress-spinner" />
-              <div><strong>{indexStatus.status === "indexing" ? "Indexing repository" : "Preparing repository"}</strong><p>{indexStatus.message}</p></div>
+              <div>
+                <strong>{indexStatus.status === "indexing" ? "Indexing repository" : "Preparing repository"}</strong>
+                <p>{indexStatus.message}</p>
+              </div>
             </div>
           )}
           {error && <div className="error-message">{error}</div>}
 
-          <section className="home-actions">
+          {/* ── Actions grid ── */}
+          <section className="home-actions scroll-reveal">
             <div className="home-section-heading">
-              <div><span className="eyebrow">WORKSPACE</span><h2>What would you like to do?</h2></div>
+              <div>
+                <span className="eyebrow">GET STARTED</span>
+                <h2>What do you want to do?</h2>
+              </div>
               <button className="replace-action" onClick={() => { setError(""); setShowReplaceForm(true); }}>
-                {repository ? "Replace repository" : "Connect repository"}
+                {repository ? "Switch repository" : "Connect repository"}
               </button>
             </div>
             <div className="action-grid">
               <button className="action-card editor-action" disabled={!repository} onClick={() => navigate("editor")}>
-                <span className="action-icon">⌘</span><span className="action-title">Open editor</span>
-                <span className="action-description">Explore and edit files with the RACA assistant by your side.</span>
+                <span className="action-icon">⌘</span>
+                <span className="action-title">Code editor</span>
+                <span className="action-description">Browse and edit files side-by-side with the RACA assistant.</span>
                 <span className="action-arrow">↗</span>
               </button>
               <button className="action-card" disabled={!repository} onClick={() => navigate("understanding")}>
-                <span className="action-icon">◈</span><span className="action-title">Repository understanding</span>
-                <span className="action-description">Explore architecture, project structure, and module relationships.</span>
+                <span className="action-icon">◈</span>
+                <span className="action-title">Repository overview</span>
+                <span className="action-description">Get a plain-language map of the architecture, structure, and module relationships.</span>
                 <span className="action-arrow">↗</span>
               </button>
               <button className="action-card" disabled={!repository} onClick={() => navigate("navigation")}>
-                <span className="action-icon">⌕</span><span className="action-title">Code navigation</span>
-                <span className="action-description">Find definitions, function usages, and configuration files.</span>
+                <span className="action-icon">⌕</span>
+                <span className="action-title">Code navigation</span>
+                <span className="action-description">Jump to definitions, trace usages, and locate configuration files fast.</span>
                 <span className="action-arrow">↗</span>
               </button>
               <button className="action-card" disabled={!repository} onClick={() => navigate("bugs")}>
-                <span className="action-icon">⌁</span><span className="action-title">Bug investigation &amp; improvements</span>
-                <span className="action-description">Trace errors, investigate likely causes, and review code quality.</span>
+                <span className="action-icon">⌁</span>
+                <span className="action-title">Bug investigation</span>
+                <span className="action-description">Trace errors to their source, explore likely causes, and spot quality issues.</span>
                 <span className="action-arrow">↗</span>
               </button>
               <button className="action-card replace-card" onClick={() => { setError(""); setShowReplaceForm(true); }}>
-                <span className="action-icon">⇄</span><span className="action-title">{repository ? "Switch repository" : "Add a repository"}</span>
-                <span className="action-description">Stage and validate a GitHub repository before making it active.</span>
+                <span className="action-icon">⇄</span>
+                <span className="action-title">{repository ? "Switch repository" : "Add a repository"}</span>
+                <span className="action-description">Clone and index a new GitHub repository before making it active.</span>
                 <span className="action-arrow">↗</span>
               </button>
             </div>
           </section>
+
+          {/* ── Features strip ── */}
+          <section className="home-features scroll-reveal">
+            <div className="home-section-heading">
+              <div>
+                <span className="eyebrow">HOW IT WORKS</span>
+                <h2>Three retrieval layers, one coherent answer.</h2>
+              </div>
+            </div>
+            <div className="features-grid">
+              <div className="feature-card">
+                <span className="feature-icon">◎</span>
+                <h3>Semantic search</h3>
+                <p>
+                  Embedding-based lookup finds conceptually related files and
+                  functions even when the words do not match exactly.
+                </p>
+              </div>
+              <div className="feature-card">
+                <span className="feature-icon">⌗</span>
+                <h3>Keyword retrieval</h3>
+                <p>
+                  Exact token matching catches identifiers, error strings, and
+                  configuration keys that semantic search might miss.
+                </p>
+              </div>
+              <div className="feature-card">
+                <span className="feature-icon">⬡</span>
+                <h3>Code graph</h3>
+                <p>
+                  A call and dependency graph lets RACA trace how modules connect
+                  — useful for architecture questions and bug traces.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* ── How it works steps ── */}
+          <section className="home-steps scroll-reveal">
+            <div className="home-section-heading">
+              <div>
+                <span className="eyebrow">GETTING STARTED</span>
+                <h2>Up and running in three steps.</h2>
+              </div>
+            </div>
+            <ol className="steps-list">
+              <li className="step-item">
+                <span className="step-number">01</span>
+                <div>
+                  <h3>Connect a repository</h3>
+                  <p>Paste a public GitHub URL. RACA clones the repo locally and starts building the index in the background.</p>
+                </div>
+              </li>
+              <li className="step-item">
+                <span className="step-number">02</span>
+                <div>
+                  <h3>Wait for indexing</h3>
+                  <p>The semantic, keyword, and code-graph indexes are built automatically. It usually takes under a minute for mid-size repositories.</p>
+                </div>
+              </li>
+              <li className="step-item">
+                <span className="step-number">03</span>
+                <div>
+                  <h3>Start asking questions</h3>
+                  <p>Open the editor or any analysis page and ask. Answers cite real file paths and line numbers from your codebase.</p>
+                </div>
+              </li>
+            </ol>
+          </section>
+
+          {/* ── Team teaser ── */}
+          <section className="home-team-teaser scroll-reveal">
+            <div className="team-teaser-copy">
+              <span className="eyebrow">THE TEAM</span>
+              <h2>Who built this.</h2>
+              <p>
+                Four people, each working on a different part of the system:
+                AI retrieval, the repository knowledge graph, source-code
+                analysis, and full-stack integration.
+              </p>
+              <button className="replace-action team-teaser-cta" onClick={() => navigate("team")}>
+                Meet the team →
+              </button>
+            </div>
+            <div className="team-teaser-avatars">
+              {[
+                { initials: "KM", name: "Kattika Mohammed Sameer Wahab" },
+                { initials: "AR", name: "Angelina Ruth Robert" },
+                { initials: "MA", name: "Mohammed Aadil M" },
+                { initials: "SK", name: "Samruddha Kalyankar" },
+              ].map((p) => (
+                <div className="teaser-avatar" key={p.initials} title={p.name}>
+                  {p.initials}
+                </div>
+              ))}
+            </div>
+          </section>
+
         </main>
-        <footer className="home-footer"><span>RACA · REPOSITORY AWARE CODING ASSISTANT</span><span>Semantic · Keyword · Graph</span></footer>
 
         {showReplaceForm && (
           <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
@@ -773,15 +943,15 @@ function App() {
             <section className="replace-dialog" role="dialog" aria-modal="true" aria-labelledby="replace-title">
               <button className="dialog-close" aria-label="Close dialog" disabled={ingesting} onClick={() => setShowReplaceForm(false)}>×</button>
               <span className="eyebrow">REPOSITORY SOURCE</span>
-              <h2 id="replace-title">{repository ? "Replace active repository" : "Connect a repository"}</h2>
-              <p>Enter a public GitHub repository URL. The current workspace remains active until the new index has been validated.</p>
+              <h2 id="replace-title">{repository ? "Switch the active repository" : "Connect a repository"}</h2>
+              <p>Paste a public GitHub URL. The current workspace stays active until the new index passes validation.</p>
               <form onSubmit={ingestRepository} className="repository-form">
                 <input type="url" required placeholder="https://github.com/owner/repository" value={githubUrl} onChange={(event) => setGithubUrl(event.target.value)} disabled={ingesting} />
                 <button type="submit" disabled={ingesting || !githubUrl.trim()}>{ingesting ? "Working…" : "Start indexing"}</button>
               </form>
               {ingesting && <div className="index-status" role="status"><span className="progress-spinner" />{indexStatus.message}</div>}
               {error && <div className="error-message">{error}</div>}
-              {!ingesting && <p className="dialog-footnote">The new repository is activated only after semantic and graph indexes pass validation.</p>}
+              {!ingesting && <p className="dialog-footnote">The new repository activates only after semantic and graph indexes pass validation.</p>}
             </section>
           </div>
         )}
@@ -796,14 +966,9 @@ function App() {
       bugs: ["Bug investigation & improvements", "Use repository evidence to explore issues and code quality."],
     };
     const [title, subtitle] = titles[page] || titles.understanding;
-    return (
+    return shell(
       <div className="app analysis-app">
         <header className="topbar analysis-topbar">
-          <div className="brand">
-            <button className="home-back-button" onClick={() => navigate("home")}>← Home</button>
-            <strong>RACA</strong>
-            <span>{repository}</span>
-          </div>
           <div className="analysis-page-title"><strong>{title}</strong><span>{subtitle}</span></div>
           <span className={`index-status-indicator ${indexStatus.status}`} title={indexStatus.message}>
             {indexStatusLabel(indexStatus.status)}
@@ -830,15 +995,9 @@ function App() {
     }
   `;
 
-  return (
+  return shell(
     <div className="app">
       <header className="topbar">
-        <div className="brand">
-          <button className="home-back-button" onClick={() => navigate("home")}>← Home</button>
-          <strong>RACA</strong>
-          <span>{repository}</span>
-        </div>
-
         <div className="topbar-actions">
           <span
             className={`index-status-indicator ${indexStatus.status}`}
@@ -941,7 +1100,7 @@ function App() {
               value={fileContent}
               onChange={(value) => setFileContent(value ?? "")}
               onMount={handleEditorMount}
-              theme="vs-dark"
+              theme={theme === "light" ? "vs" : "vs-dark"}
               options={{
                 readOnly: !selectedFile || ingesting,
                 minimap: {
