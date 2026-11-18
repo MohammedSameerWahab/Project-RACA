@@ -3,7 +3,8 @@
   flex: 1;
   overflow: auto;
   padding: clamp(16px, 3vw, 32px);
-  color: #e6edf3;
+  color: var(--text, #e6edf3);
+  animation: page-rise 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .analysis-tabs {
