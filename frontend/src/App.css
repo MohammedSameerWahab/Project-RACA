@@ -271,17 +271,12 @@ button {
 
 .panel {
   position: relative;
-
   min-width: 0;
   min-height: 0;
-
   display: flex;
   flex-direction: column;
-
-  border-right: 1px solid #30363d;
-
-  background: #0d1117;
-
+  border-right: 1px solid var(--border, #3a2b20);
+  background: var(--bg, #120d0a);
   overflow: hidden;
 }
 
@@ -290,48 +285,41 @@ button {
 }
 
 .panel-header {
-  flex: 0 0 42px;
-
+  flex: 0 0 44px;
   display: flex;
   align-items: center;
-
-  padding: 0 14px;
-
-  border-bottom: 1px solid #30363d;
-
-  color: #c9d1d9;
-
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border, #3a2b20);
+  background: var(--surface, #1c140f);
+  backdrop-filter: blur(14px);
+  color: var(--text-strong, #ffffff);
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .collapse-button {
   position: absolute;
-
-  top: 8px;
-  right: 8px;
-
+  top: 9px;
+  right: 9px;
   z-index: 10;
-
   width: 26px;
   height: 26px;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
-  border: 1px solid #30363d;
-  border-radius: 5px;
-
-  background: #161b22;
-  color: #8b949e;
-
-  font-size: 18px;
+  border: 1px solid var(--border, #3a2b20);
+  border-radius: 6px;
+  background: var(--surface-alt, #261c15);
+  color: var(--muted, #ba9f88);
+  font-size: 16px;
+  transition: all 180ms ease;
 }
 
 .collapse-button:hover {
-  color: #e6edf3;
-  background: #21262d;
+  color: var(--text, #ffffff);
+  border-color: var(--accent);
+  background: var(--surface);
 }
 
 .panel.collapsed {
@@ -339,13 +327,8 @@ button {
   width: 42px;
 }
 
-
-/* -------------------------------------------------------------------------- */
-/* Explorer                                                                  */
-/* -------------------------------------------------------------------------- */
-
 .explorer {
-  background: #0d1117;
+  background: var(--bg, #120d0a);
 }
 
 .file-tree {
@@ -395,55 +378,63 @@ button {
 }
 
 .tree-file:hover {
-  background: #161b22;
-  color: #e6edf3;
+  background: var(--surface-alt, #261c15);
+  color: var(--text-strong, #ffffff);
 }
 
 .tree-file.active {
-  background: #1f6feb33;
-  color: #58a6ff;
+  background: var(--surface-alt, #261c15);
+  color: var(--accent, #d4976a);
+  border-left: 2px solid var(--accent, #d4976a);
 }
 
-
-/* -------------------------------------------------------------------------- */
-/* Editor                                                                    */
-/* -------------------------------------------------------------------------- */
-
 .editor-panel {
-  background: #1e1e1e;
+  background: var(--bg-deep, #0c0806);
 }
 
 .editor-header {
-  background: #161b22;
+  background: var(--surface, #1c140f);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border, #3a2b20);
 }
 
 .cursor-info {
   margin-left: auto;
-
-  color: #8b949e;
-
-  font-size: 12px;
-  font-weight: 400;
+  color: var(--muted, #ba9f88);
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
 }
 
 .save-button {
   margin-left: 12px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--lp-accent-ink, #ffffff);
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 180ms ease;
+}
+
+.save-button:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.save-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .editor-container {
   flex: 1;
   min-height: 0;
-
   overflow: hidden;
 }
 
-
-/* -------------------------------------------------------------------------- */
-/* Assistant                                                                 */
-/* -------------------------------------------------------------------------- */
-
 .assistant-panel {
-  background: #0d1117;
+  background: var(--bg, #120d0a);
 }
 
 .chat-messages {
@@ -468,39 +459,77 @@ button {
 
 .message {
   margin-bottom: 20px;
-
   line-height: 1.55;
+  transition: all 200ms ease;
+}
+
+.message-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
 }
 
 .message-role {
-  margin-bottom: 6px;
-
   font-size: 12px;
   font-weight: 700;
+  color: var(--text-strong, #ffffff);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
 
-  color: #8b949e;
+.message-model-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  padding: 3px 9px;
+  border-radius: 12px;
+  background: var(--surface-alt, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  color: var(--muted, #8b949e);
+  letter-spacing: 0.04em;
+}
+
+.message-model-badge.streaming {
+  color: var(--accent, #38bdf8);
+  border-color: var(--accent, #38bdf8);
+  background: color-mix(in srgb, var(--accent, #38bdf8) 12%, transparent);
+}
+
+.badge-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, #38bdf8);
+  box-shadow: 0 0 6px var(--accent, #38bdf8);
+  animation: dot-pulse 1.8s infinite ease-in-out;
 }
 
 .user-message {
-  padding-left: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-alt, #1c140f);
+  border: 1px solid var(--border-subtle, #3a2b20);
 }
 
 .user-message .message-content {
-  color: #e6edf3;
+  color: var(--text, #ffffff);
 }
 
 .assistant-message {
-  padding: 14px;
-
-  border: 1px solid #30363d;
-  border-radius: 8px;
-
-  background: #161b22;
+  padding: 16px;
+  border: 1px solid var(--border, #3a2b20);
+  border-radius: 12px;
+  background: var(--surface, #16100c);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
 .message-content {
   min-width: 0;
-
   overflow-wrap: anywhere;
 }
 
@@ -959,7 +988,7 @@ button {
 
 .replace-action {
   padding: 8px 11px;
-  color: #d2a8ff;
+  color: #ffffff;
   font-size: 12px;
 }
 
@@ -1597,4 +1626,82 @@ button {
 
 .role-card {
   animation-delay: var(--card-delay, 0ms);
+}
+
+/* Day mode: strip leftover blue and purple chrome. */
+[data-theme="light"] .brand strong,
+[data-theme="light"] .feature-icon,
+[data-theme="light"] .repository-summary a,
+[data-theme="light"] .action-icon,
+[data-theme="light"] .teaser-avatar,
+[data-theme="light"] .member-avatar,
+[data-theme="light"] .member-role-tag {
+  color: #111111;
+}
+[data-theme="light"] .feature-card h3,
+[data-theme="light"] .step-item h3,
+[data-theme="light"] .team-teaser-copy h2,
+[data-theme="light"] .message-content h1,
+[data-theme="light"] .message-content h2,
+[data-theme="light"] .message-content h3,
+[data-theme="light"] .message-content h4 {
+  color: #1e3a8a;
+}
+
+[data-theme="light"] .brand-mark,
+[data-theme="light"] .action-icon,
+[data-theme="light"] .member-avatar,
+[data-theme="light"] .member-role-tag,
+[data-theme="light"] .teaser-avatar {
+  background: #ffffff;
+  border-color: #111111;
+  box-shadow: none;
+}
+
+[data-theme="light"] .feature-card,
+[data-theme="light"] .step-item,
+[data-theme="light"] .action-card,
+[data-theme="light"] .model-preference,
+[data-theme="light"] .home-progress,
+[data-theme="light"] .editor-action,
+[data-theme="light"] .home-team-teaser {
+  background: #ffffff;
+  border-color: #d9d0c3;
+  box-shadow: none;
+}
+
+[data-theme="light"] .feature-card:hover,
+[data-theme="light"] .step-item:hover,
+[data-theme="light"] .action-card:not(:disabled):hover,
+[data-theme="light"] .replace-action:hover,
+[data-theme="light"] .home-back-button:hover,
+[data-theme="light"] .team-teaser-cta:hover {
+  border-color: #111111;
+  background: #efe8dc;
+  box-shadow: none;
+  color: #111111;
+}
+
+[data-theme="light"] .repository-form input:focus,
+[data-theme="light"] .assistant-input textarea:focus,
+[data-theme="light"] .assistant-toolbar select:focus,
+[data-theme="light"] .model-preference-select select:focus {
+  border-color: #111111;
+  box-shadow: none;
+}
+
+[data-theme="light"] .progress-spinner {
+  border-color: #d9d0c3;
+  border-top-color: #111111;
+}
+
+[data-theme="light"] .repository-status,
+[data-theme="light"] .status-dot.ready {
+  color: #111111;
+  background: #111111;
+  box-shadow: none;
+}
+
+[data-theme="light"] .repository-status {
+  background: transparent;
 }

@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import StreamingMarkdown from "./StreamingMarkdown";
 import "./AnalysisPages.css";
 
-function Markdown({ children }) {
+function Markdown({ children, isStreaming = false }) {
   return (
     <div className="analysis-markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{children || ""}</ReactMarkdown>
+      <StreamingMarkdown content={children || ""} isStreaming={isStreaming} />
     </div>
   );
 }

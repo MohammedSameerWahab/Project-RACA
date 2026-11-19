@@ -329,3 +329,37 @@
     flex-direction: column;
   }
 }
+
+[data-theme="light"] .analysis-tabs button.active {
+  border-bottom-color: #111111;
+  color: #111111;
+}
+
+[data-theme="light"] .analysis-card-heading button,
+[data-theme="light"] .analysis-search button,
+[data-theme="light"] .analysis-form button {
+  border-color: #111111;
+  background: #111111;
+  color: #ffffff;
+}
+
+[data-theme="light"] .analysis-card-heading button:hover,
+[data-theme="light"] .analysis-search button:hover:not(:disabled),
+[data-theme="light"] .analysis-form button:hover:not(:disabled) {
+  background: #000000;
+  box-shadow: none;
+}
+
+[data-theme="light"] .analysis-search input:focus,
+[data-theme="light"] .analysis-form input:focus,
+[data-theme="light"] .analysis-form textarea:focus,
+[data-theme="light"] .analysis-form select:focus {
+  border-color: #111111;
+  box-shadow: none;
+}
+
+[data-theme="light"] .source-link,
+[data-theme="light"] .source-link:hover,
+[data-theme="light"] .language-list b {
+  color: #111111;
+}
