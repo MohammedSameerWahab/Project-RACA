@@ -1,0 +1,620 @@
+/* ==========================================================================
+   RACA Clean Landing Page Styles
+   - Dark Mode: Rich Brown & Crisp White
+   - Light Mode: Beige, black, and white
+   - Glass UI & Smooth Motion Design
+   ========================================================================== */
+
+@import "./tokens.css";
+
+.raca-landing-shell {
+  min-height: 100vh;
+  background-color: var(--lp-bg);
+  color: var(--lp-text);
+  font-family: var(--font-body);
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: background-color 300ms ease, color 300ms ease;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Scroll Progress Ribbon (Glass UI)                                          */
+/* -------------------------------------------------------------------------- */
+
+.raca-scroll-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--lp-accent), #ffffff, var(--lp-accent));
+  z-index: 100;
+  transform-origin: left;
+  transition: transform 60ms linear;
+  box-shadow: 0 0 12px var(--lp-accent-glow);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sticky Glass Navbar Ribbon                                                 */
+/* -------------------------------------------------------------------------- */
+
+.raca-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  transition: background 240ms ease, border-color 240ms ease;
+}
+
+.raca-glass-ribbon {
+  background: var(--lp-glass-bg);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--lp-glass-border);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+}
+
+.raca-navbar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.raca-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.raca-glass-pill {
+  background: var(--lp-surface-alt);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--lp-glass-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.raca-brand-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--lp-accent);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.raca-brand:hover .raca-brand-badge {
+  transform: scale(1.05);
+  box-shadow: 0 0 14px var(--lp-accent-glow);
+}
+
+.raca-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.raca-brand-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--lp-text-strong);
+  letter-spacing: 0.04em;
+}
+
+.raca-brand-sub {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--lp-muted);
+  text-transform: uppercase;
+}
+
+.raca-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.raca-nav-link {
+  background: none;
+  border: none;
+  padding: 6px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--lp-muted);
+  cursor: pointer;
+  position: relative;
+  transition: color 180ms ease;
+}
+
+.raca-nav-link:hover {
+  color: var(--lp-text-strong);
+}
+
+.raca-nav-link.active {
+  color: var(--lp-text-strong);
+}
+
+.raca-nav-link.active::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--lp-accent);
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--lp-accent-glow);
+}
+
+.raca-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Theme toggle pill */
+.raca-theme-toggle {
+  width: 44px;
+  height: 24px;
+  border-radius: 99px;
+  padding: 2px;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.raca-toggle-knob {
+  width: 18px;
+  height: 18px;
+  background: var(--lp-accent);
+  border-radius: 50%;
+  transition: transform 220ms ease;
+  box-shadow: 0 0 8px var(--lp-accent-glow);
+}
+
+.raca-toggle-knob.light {
+  transform: translateX(20px);
+  background: #111111;
+}
+
+/* Glass Download button */
+.raca-download-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lp-text-strong);
+  cursor: pointer;
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.raca-glass-btn {
+  background: var(--lp-surface-alt);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--lp-glass-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.raca-download-btn:hover {
+  border-color: var(--lp-accent);
+  color: var(--lp-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px var(--lp-accent-glow);
+}
+
+/* Workspace button */
+.raca-workspace-btn {
+  background: var(--lp-btn-primary);
+  border: 1px solid var(--lp-accent);
+  color: #ffffff;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 0 16px var(--lp-accent-glow);
+  transition: background 180ms ease, transform 160ms ease, box-shadow 180ms ease;
+}
+
+.raca-workspace-btn:hover {
+  background: var(--lp-btn-hover);
+  box-shadow: 0 0 24px var(--lp-accent-glow);
+  transform: translateY(-1px);
+}
+
+.raca-mobile-toggle {
+  display: none;
+  border-radius: 6px;
+  padding: 6px 8px;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.raca-mobile-toggle span {
+  width: 18px;
+  height: 2px;
+  background: var(--lp-text);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Hero Canvas Wrapper with WebGL Shader                                      */
+/* -------------------------------------------------------------------------- */
+
+.raca-hero-canvas-wrapper {
+  position: relative;
+  overflow: hidden;
+  padding-bottom: 24px;
+}
+
+.raca-shader-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.raca-main-container {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.raca-hero-section {
+  padding: 60px 0 36px;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  align-items: center;
+  gap: 48px;
+}
+
+.raca-hero-left {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 5) Text Splitting Transitions */
+.split-char {
+  transition: opacity 400ms ease, transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
+.raca-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--lp-accent);
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.raca-hero-title {
+  font-size: clamp(48px, 6vw, 76px);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--lp-text-strong);
+  margin: 0 0 16px;
+  letter-spacing: -0.02em;
+}
+
+.raca-hero-subtitle {
+  font-size: clamp(20px, 2.4vw, 26px);
+  font-weight: 600;
+  color: var(--lp-accent);
+  margin: 0 0 16px;
+  line-height: 1.25;
+}
+
+.raca-hero-description {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--lp-muted);
+  margin: 0;
+  max-width: 520px;
+}
+
+.raca-hero-right {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  will-change: transform;
+}
+
+.raca-hero-image {
+  max-width: 380px;
+  width: 100%;
+  height: auto;
+  animation: hero-gentle-float 4.8s ease-in-out infinite alternate;
+  filter: drop-shadow(0 14px 28px var(--lp-accent-glow));
+}
+
+[data-theme="light"] .raca-hero-image {
+  filter: brightness(0);
+}
+
+@keyframes hero-gentle-float {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-10px); }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Active Repository Glass Card                                               */
+/* -------------------------------------------------------------------------- */
+
+.raca-active-repo-card {
+  margin: 20px 0 50px;
+  border-radius: 14px;
+  padding: 24px;
+  transition: transform 380ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 380ms ease, opacity 380ms ease;
+  opacity: 0.96;
+}
+
+.raca-active-repo-card.revealed {
+  opacity: 1;
+  transform: none;
+}
+
+.raca-glass-card {
+  background: var(--lp-glass-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--lp-glass-border);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.raca-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.raca-card-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--lp-text);
+  text-transform: uppercase;
+}
+
+.raca-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background-color: var(--lp-accent);
+  box-shadow: 0 0 10px var(--lp-accent);
+  animation: dot-pulse 2s infinite ease-in-out;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.25); opacity: 0.7; }
+}
+
+.raca-status-badge {
+  color: var(--lp-muted);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 14px;
+  border-radius: 16px;
+}
+
+.raca-ingest-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.raca-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  padding: 0 16px;
+  height: 48px;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.raca-glass-input {
+  background: var(--lp-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--lp-line);
+}
+
+.raca-input-wrapper:focus-within {
+  border-color: var(--lp-accent);
+  box-shadow: 0 0 0 2px var(--lp-accent-glow);
+}
+
+.raca-prefix {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--lp-accent);
+  padding-right: 10px;
+  user-select: none;
+}
+
+.raca-repo-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--lp-text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.raca-repo-input::placeholder {
+  color: var(--lp-muted);
+}
+
+.raca-ingest-btn {
+  background: var(--lp-btn-primary);
+  border: 1px solid var(--lp-accent);
+  color: #ffffff;
+  padding: 0 24px;
+  height: 48px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 180ms ease;
+  box-shadow: 0 0 14px var(--lp-accent-glow);
+}
+
+.raca-glow-btn:hover {
+  background: var(--lp-btn-hover);
+  box-shadow: 0 0 22px var(--lp-accent-glow);
+  transform: translateY(-1px);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Scrollable 2nd Page (Workspace Section)                                    */
+/* -------------------------------------------------------------------------- */
+
+.raca-workspace-scroll-section {
+  border-top: 1px solid var(--lp-line);
+  background: var(--lp-bg-deep);
+  padding: 48px 0 64px;
+}
+
+.raca-section-header {
+  margin-bottom: 24px;
+}
+
+.raca-section-heading {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--lp-text-strong);
+  margin: 6px 0 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Footer                                                                     */
+/* -------------------------------------------------------------------------- */
+
+.raca-footer {
+  border-top: 1px solid var(--lp-line);
+  padding: 24px 0;
+}
+
+.raca-footer-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.raca-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.raca-footer-brand {
+  font-weight: 800;
+  color: var(--lp-text-strong);
+}
+
+.raca-footer-copy {
+  font-size: 12px;
+  color: var(--lp-muted);
+}
+
+.raca-footer-links {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.raca-footer-links button {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--lp-muted);
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.raca-footer-links button:hover {
+  color: var(--lp-text-strong);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Responsive                                                                 */
+/* -------------------------------------------------------------------------- */
+
+@media (max-width: 860px) {
+  .raca-hero-section {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    padding: 36px 0 24px;
+  }
+
+  .raca-hero-right {
+    order: -1;
+  }
+
+  .raca-hero-image {
+    max-width: 260px;
+  }
+
+  .raca-nav-links {
+    display: none;
+    position: absolute;
+    top: 68px;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px 24px;
+    background: var(--lp-bg);
+    border-bottom: 1px solid var(--lp-line);
+  }
+
+  .raca-nav-links.open {
+    display: flex;
+  }
+
+  .raca-mobile-toggle {
+    display: flex;
+  }
+
+  .raca-ingest-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .raca-ingest-btn {
+    width: 100%;
+  }
+}

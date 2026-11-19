@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import RacaLogo from "./RacaLogo";
+import { DOWNLOAD_URL } from "./LandingPage";
 import "./Layout.css";
 
 const THEME_KEY = "raca.theme";
@@ -22,7 +24,8 @@ export function applyTheme(theme) {
 }
 
 const NAV_LINKS = [
-  { id: "home", label: "Home" },
+  { id: "landing", label: "Home" },
+  { id: "workspace", label: "Workspace" },
   { id: "about", label: "About" },
   { id: "team", label: "Team" },
   { id: "contact", label: "Contact" },
@@ -83,20 +86,37 @@ export default function Layout({
     setUser(null);
   }
 
+  function handleDocsClick() {
+    if (DOWNLOAD_URL === "dummyurl") {
+      const element = document.createElement("a");
+      const file = new Blob(
+        ["RACA Project Source & Documentation\nURL: " + DOWNLOAD_URL],
+        { type: "text/plain" }
+      );
+      element.href = URL.createObjectURL(file);
+      element.download = "RACA-docs.txt";
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+    } else {
+      window.open(DOWNLOAD_URL, "_blank");
+    }
+  }
+
   return (
     <div className={`site-shell ${compact ? "compact" : ""} ${page}`}>
       <header className="site-navbar">
         <div className="navbar-inner">
-          <button className="navbar-brand" type="button" onClick={() => onNavigate("home")}>
-            <span className="brand-mark">R</span>
+          <button className="navbar-brand" type="button" onClick={() => onNavigate("landing")}>
+            <RacaLogo size={32} />
             <span>
               <strong>RACA</strong>
-              <em>Repository intelligence</em>
+              <em>Repository Aware Coding Assistant</em>
             </span>
           </button>
 
           <nav className={`navbar-links ${menuOpen ? "open" : ""}`} aria-label="Primary">
-            {NAV_LINKS.map((link) => (
+            {NAV_LINKS.filter((link) => !(page === "about" && link.id === "workspace")).map((link) => (
               <button
                 key={link.id}
                 type="button"
@@ -121,6 +141,17 @@ export default function Layout({
               <span className="theme-icon sun" aria-hidden="true">☀</span>
               <span className="theme-icon moon" aria-hidden="true">☾</span>
             </button>
+
+            {/* Docs download button present everywhere */}
+            <button
+              type="button"
+              className="docs-nav-button"
+              onClick={handleDocsClick}
+              title="Download documentation"
+            >
+              Docs ↓
+            </button>
+
             {user ? (
               <div className="navbar-user">
                 <span className="user-avatar">{user.name.slice(0, 1).toUpperCase()}</span>
@@ -153,7 +184,7 @@ export default function Layout({
         <div className="footer-grid">
           <div>
             <div className="navbar-brand footer-brand">
-              <span className="brand-mark">R</span>
+              <RacaLogo size={28} />
               <strong>RACA</strong>
             </div>
             <p>Repository Aware Coding Assistant. Grounded navigation, investigation, and understanding for your codebase.</p>

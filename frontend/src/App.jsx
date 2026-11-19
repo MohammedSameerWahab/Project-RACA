@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import StreamingMarkdown from "./StreamingMarkdown";
 import {
   BugInvestigation,
   CodeNavigation,
   RepositoryUnderstanding,
 } from "./AnalysisPages";
 import Layout, { applyTheme, getStoredTheme } from "./Layout";
+import LandingPage from "./LandingPage";
 import { AboutPage, ContactPage, TeamPage } from "./SitePages";
 import heroArt from "./assets/hero.png";
 import "./App.css";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 const PAGES = new Set([
+  "landing",
+  "workspace",
   "home",
   "editor",
   "understanding",
@@ -54,7 +56,10 @@ function indexStatusLabel(status) {
 function App() {
   const [page, setPage] = useState(() => {
     const requested = window.location.hash.slice(1);
-    return PAGES.has(requested) ? requested : "home";
+    if (requested && PAGES.has(requested)) {
+      return requested;
+    }
+    return "landing";
   });
   const [repository, setRepository] = useState(null);
   const [repositoryProfile, setRepositoryProfile] = useState(null);
@@ -106,7 +111,7 @@ function App() {
   }, [selectedModel]);
 
   const navigate = useCallback((nextPage) => {
-    const safePage = PAGES.has(nextPage) ? nextPage : "home";
+    const safePage = PAGES.has(nextPage) ? nextPage : "landing";
     window.history.pushState({ page: safePage }, "", `#${safePage}`);
     setPage(safePage);
   }, []);
@@ -114,7 +119,7 @@ function App() {
   useEffect(() => {
     function handlePopState() {
       const requested = window.location.hash.slice(1);
-      setPage(PAGES.has(requested) ? requested : "home");
+      setPage(PAGES.has(requested) ? requested : "landing");
     }
     function syncTheme(event) {
       const next = event.detail || getStoredTheme();
@@ -712,229 +717,216 @@ function App() {
     return shell(<ContactPage />);
   }
 
-  if (page === "home" || !repository) {
-    return shell(
-      <div className="home-page">
-        <main className="home-content">
-
-          {/* ── Hero ── */}
-          <section className="home-hero scroll-reveal visible">
-            <div className="home-hero-copy">
-              <span className="eyebrow">YOUR CODEBASE, UNDERSTOOD</span>
-              <h1>Build with context.</h1>
-              <p>
-                Navigate, investigate, and understand any GitHub repository
-                with an assistant that reads the actual source — not guesses.
-              </p>
-            </div>
-            <img className="home-hero-art" src={heroArt} alt="" />
-          </section>
-
-          {/* ── Repository status + model ── */}
-          <section className="repository-summary scroll-reveal">
-            <div className="repository-summary-main">
-              <span className={`status-dot ${repository ? "ready" : ""}`} />
-              <div>
-                <span className="summary-label">ACTIVE REPOSITORY</span>
-                <h2>{repository || "No repository connected"}</h2>
-                {repositoryProfile?.url && (
-                  <a href={repositoryProfile.url} target="_blank" rel="noreferrer">{repositoryProfile.url}</a>
-                )}
-                {repositoryProfile?.description && <p>{repositoryProfile.description}</p>}
-                {!repository && <p>Connect a GitHub repository to open the editor and analysis tools.</p>}
-              </div>
-            </div>
-            <div className="repository-summary-side">
-              <span className="repository-status">{repository ? indexStatusLabel(indexStatus.status) : "not connected"}</span>
-              {repositoryProfile?.file_count !== undefined && (
-                <span>{repositoryProfile.file_count.toLocaleString()} files</span>
+  if (page === "landing" || page === "workspace" || page === "home" || !repository) {
+    const workspaceContent = (
+      <main className="home-content" style={{ maxWidth: "100%", padding: 0 }}>
+        {/* ── Repository status + model ── */}
+        <section className="repository-summary scroll-reveal visible" style={{ marginTop: 0 }}>
+          <div className="repository-summary-main">
+            <span className={`status-dot ${repository ? "ready" : ""}`} />
+            <div>
+              <span className="summary-label">ACTIVE REPOSITORY</span>
+              <h2>{repository || "No repository connected"}</h2>
+              {repositoryProfile?.url && (
+                <a href={repositoryProfile.url} target="_blank" rel="noreferrer">{repositoryProfile.url}</a>
               )}
-              {repository && <span>{repositoryProfile?.url ? "GitHub" : "Local repository"}</span>}
+              {repositoryProfile?.description && <p>{repositoryProfile.description}</p>}
+              {!repository && <p>Connect a GitHub repository to open the editor and analysis tools.</p>}
             </div>
-          </section>
+          </div>
+          <div className="repository-summary-side">
+            <span className="repository-status">{repository ? indexStatusLabel(indexStatus.status) : "not connected"}</span>
+            {repositoryProfile?.file_count !== undefined && (
+              <span>{repositoryProfile.file_count.toLocaleString()} files</span>
+            )}
+            {repository && <span>{repositoryProfile?.url ? "GitHub" : "Local repository"}</span>}
+          </div>
+        </section>
 
-          <section className="model-preference scroll-reveal" aria-labelledby="model-preference-title">
-            <div className="model-preference-copy">
-              <span className="eyebrow">ASSISTANT MODEL</span>
-              <h2 id="model-preference-title">Pick your preferred model</h2>
-              <p>
-                {llmModels.some((model) => model.configured)
-                  ? "If the selected model is busy or rate-limited, RACA falls back through the remaining configured models automatically."
-                  : "Add at least one provider API key to .env to enable model selection."}
-              </p>
-            </div>
-            <label className="model-preference-select" htmlFor="preferred-model">
-              <span>Start with</span>
-              <select
-                id="preferred-model"
-                value={selectedModel}
-                onChange={(event) => setSelectedModel(event.target.value)}
-                disabled={isStreaming}
-              >
-                {llmModels.length === 0 && <option value="local-qwen2.5-coder-3b">Loading models…</option>}
-                {llmModels.map((model) => (
-                  <option key={model.id} value={model.id} disabled={!model.configured}>
-                    {model.label}{model.configured ? "" : " · not configured"}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </section>
-
-          {ingesting && (
-            <div className="home-progress" role="status">
-              <span className="progress-spinner" />
-              <div>
-                <strong>{indexStatus.status === "indexing" ? "Indexing repository" : "Preparing repository"}</strong>
-                <p>{indexStatus.message}</p>
-              </div>
-            </div>
-          )}
-          {error && <div className="error-message">{error}</div>}
-
-          {/* ── Actions grid ── */}
-          <section className="home-actions scroll-reveal">
-            <div className="home-section-heading">
-              <div>
-                <span className="eyebrow">GET STARTED</span>
-                <h2>What do you want to do?</h2>
-              </div>
-              <button className="replace-action" onClick={() => { setError(""); setShowReplaceForm(true); }}>
-                {repository ? "Switch repository" : "Connect repository"}
-              </button>
-            </div>
-            <div className="action-grid">
-              <button className="action-card editor-action" disabled={!repository} onClick={() => navigate("editor")}>
-                <span className="action-icon">⌘</span>
-                <span className="action-title">Code editor</span>
-                <span className="action-description">Browse and edit files side-by-side with the RACA assistant.</span>
-                <span className="action-arrow">↗</span>
-              </button>
-              <button className="action-card" disabled={!repository} onClick={() => navigate("understanding")}>
-                <span className="action-icon">◈</span>
-                <span className="action-title">Repository overview</span>
-                <span className="action-description">Get a plain-language map of the architecture, structure, and module relationships.</span>
-                <span className="action-arrow">↗</span>
-              </button>
-              <button className="action-card" disabled={!repository} onClick={() => navigate("navigation")}>
-                <span className="action-icon">⌕</span>
-                <span className="action-title">Code navigation</span>
-                <span className="action-description">Jump to definitions, trace usages, and locate configuration files fast.</span>
-                <span className="action-arrow">↗</span>
-              </button>
-              <button className="action-card" disabled={!repository} onClick={() => navigate("bugs")}>
-                <span className="action-icon">⌁</span>
-                <span className="action-title">Bug investigation</span>
-                <span className="action-description">Trace errors to their source, explore likely causes, and spot quality issues.</span>
-                <span className="action-arrow">↗</span>
-              </button>
-              <button className="action-card replace-card" onClick={() => { setError(""); setShowReplaceForm(true); }}>
-                <span className="action-icon">⇄</span>
-                <span className="action-title">{repository ? "Switch repository" : "Add a repository"}</span>
-                <span className="action-description">Clone and index a new GitHub repository before making it active.</span>
-                <span className="action-arrow">↗</span>
-              </button>
-            </div>
-          </section>
-
-          {/* ── Features strip ── */}
-          <section className="home-features scroll-reveal">
-            <div className="home-section-heading">
-              <div>
-                <span className="eyebrow">HOW IT WORKS</span>
-                <h2>Three retrieval layers, one coherent answer.</h2>
-              </div>
-            </div>
-            <div className="features-grid">
-              <div className="feature-card">
-                <span className="feature-icon">◎</span>
-                <h3>Semantic search</h3>
-                <p>
-                  Embedding-based lookup finds conceptually related files and
-                  functions even when the words do not match exactly.
-                </p>
-              </div>
-              <div className="feature-card">
-                <span className="feature-icon">⌗</span>
-                <h3>Keyword retrieval</h3>
-                <p>
-                  Exact token matching catches identifiers, error strings, and
-                  configuration keys that semantic search might miss.
-                </p>
-              </div>
-              <div className="feature-card">
-                <span className="feature-icon">⬡</span>
-                <h3>Code graph</h3>
-                <p>
-                  A call and dependency graph lets RACA trace how modules connect
-                  — useful for architecture questions and bug traces.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* ── How it works steps ── */}
-          <section className="home-steps scroll-reveal">
-            <div className="home-section-heading">
-              <div>
-                <span className="eyebrow">GETTING STARTED</span>
-                <h2>Up and running in three steps.</h2>
-              </div>
-            </div>
-            <ol className="steps-list">
-              <li className="step-item">
-                <span className="step-number">01</span>
-                <div>
-                  <h3>Connect a repository</h3>
-                  <p>Paste a public GitHub URL. RACA clones the repo locally and starts building the index in the background.</p>
-                </div>
-              </li>
-              <li className="step-item">
-                <span className="step-number">02</span>
-                <div>
-                  <h3>Wait for indexing</h3>
-                  <p>The semantic, keyword, and code-graph indexes are built automatically. It usually takes under a minute for mid-size repositories.</p>
-                </div>
-              </li>
-              <li className="step-item">
-                <span className="step-number">03</span>
-                <div>
-                  <h3>Start asking questions</h3>
-                  <p>Open the editor or any analysis page and ask. Answers cite real file paths and line numbers from your codebase.</p>
-                </div>
-              </li>
-            </ol>
-          </section>
-
-          {/* ── Team teaser ── */}
-          <section className="home-team-teaser scroll-reveal">
-            <div className="team-teaser-copy">
-              <span className="eyebrow">THE TEAM</span>
-              <h2>Who built this.</h2>
-              <p>
-                Four people, each working on a different part of the system:
-                AI retrieval, the repository knowledge graph, source-code
-                analysis, and full-stack integration.
-              </p>
-              <button className="replace-action team-teaser-cta" onClick={() => navigate("team")}>
-                Meet the team →
-              </button>
-            </div>
-            <div className="team-teaser-avatars">
-              {[
-                { initials: "KM", name: "Kattika Mohammed Sameer Wahab" },
-                { initials: "AR", name: "Angelina Ruth Robert" },
-                { initials: "MA", name: "Mohammed Aadil M" },
-                { initials: "SK", name: "Samruddha Kalyankar" },
-              ].map((p) => (
-                <div className="teaser-avatar" key={p.initials} title={p.name}>
-                  {p.initials}
-                </div>
+        <section className="model-preference scroll-reveal visible" aria-labelledby="model-preference-title">
+          <div className="model-preference-copy">
+            <span className="eyebrow">ASSISTANT MODEL</span>
+            <h2 id="model-preference-title">Pick your preferred model</h2>
+            <p>
+              {llmModels.some((model) => model.configured)
+                ? "If the selected model is busy or rate-limited, RACA falls back through the remaining configured models automatically."
+                : "Add at least one provider API key to .env to enable model selection."}
+            </p>
+          </div>
+          <label className="model-preference-select" htmlFor="preferred-model">
+            <span>Start with</span>
+            <select
+              id="preferred-model"
+              value={selectedModel}
+              onChange={(event) => setSelectedModel(event.target.value)}
+              disabled={isStreaming}
+            >
+              {llmModels.length === 0 && <option value="local-qwen2.5-coder-3b">Loading models…</option>}
+              {llmModels.map((model) => (
+                <option key={model.id} value={model.id} disabled={!model.configured}>
+                  {model.label}{model.configured ? "" : " · not configured"}
+                </option>
               ))}
-            </div>
-          </section>
+            </select>
+          </label>
+        </section>
 
-        </main>
+        {ingesting && (
+          <div className="home-progress" role="status">
+            <span className="progress-spinner" />
+            <div>
+              <strong>{indexStatus.status === "indexing" ? "Indexing repository" : "Preparing repository"}</strong>
+              <p>{indexStatus.message}</p>
+            </div>
+          </div>
+        )}
+        {error && <div className="error-message">{error}</div>}
+
+        {/* ── Actions grid ── */}
+        <section className="home-actions scroll-reveal visible">
+          <div className="home-section-heading">
+            <div>
+              <span className="eyebrow">GET STARTED</span>
+              <h2>What do you want to do?</h2>
+            </div>
+            <button className="replace-action" onClick={() => { setError(""); setShowReplaceForm(true); }}>
+              {repository ? "Switch repository" : "Connect repository"}
+            </button>
+          </div>
+          <div className="action-grid">
+            <button className="action-card editor-action" disabled={!repository} onClick={() => navigate("editor")}>
+              <span className="action-icon">⌘</span>
+              <span className="action-title">Code editor</span>
+              <span className="action-description">Browse and edit files side-by-side with the RACA assistant.</span>
+              <span className="action-arrow">↗</span>
+            </button>
+            <button className="action-card" disabled={!repository} onClick={() => navigate("understanding")}>
+              <span className="action-icon">◈</span>
+              <span className="action-title">Repository overview</span>
+              <span className="action-description">Get a plain-language map of the architecture, structure, and module relationships.</span>
+              <span className="action-arrow">↗</span>
+            </button>
+            <button className="action-card" disabled={!repository} onClick={() => navigate("navigation")}>
+              <span className="action-icon">⌕</span>
+              <span className="action-title">Code navigation</span>
+              <span className="action-description">Jump to definitions, trace usages, and locate configuration files fast.</span>
+              <span className="action-arrow">↗</span>
+            </button>
+            <button className="action-card" disabled={!repository} onClick={() => navigate("bugs")}>
+              <span className="action-icon">⌁</span>
+              <span className="action-title">Bug investigation</span>
+              <span className="action-description">Trace errors to their source, explore likely causes, and spot quality issues.</span>
+              <span className="action-arrow">↗</span>
+            </button>
+            <button className="action-card replace-card" onClick={() => { setError(""); setShowReplaceForm(true); }}>
+              <span className="action-icon">⇄</span>
+              <span className="action-title">{repository ? "Switch repository" : "Add a repository"}</span>
+              <span className="action-description">Clone and index a new GitHub repository before making it active.</span>
+              <span className="action-arrow">↗</span>
+            </button>
+          </div>
+        </section>
+
+        {/* ── Features strip (Three retrieval layers) ── */}
+        <section className="home-features scroll-reveal visible">
+          <div className="home-section-heading">
+            <div>
+              <span className="eyebrow">HOW IT WORKS</span>
+              <h2>Three retrieval layers, one coherent answer.</h2>
+            </div>
+          </div>
+          <div className="features-grid">
+            <div className="feature-card">
+              <span className="feature-icon">◎</span>
+              <h3>Semantic search</h3>
+              <p>
+                Embedding-based lookup finds conceptually related files and
+                functions even when the words do not match exactly.
+              </p>
+            </div>
+            <div className="feature-card">
+              <span className="feature-icon">⌗</span>
+              <h3>Keyword retrieval</h3>
+              <p>
+                Exact token matching catches identifiers, error strings, and
+                configuration keys that semantic search might miss.
+              </p>
+            </div>
+            <div className="feature-card">
+              <span className="feature-icon">⬡</span>
+              <h3>Code graph</h3>
+              <p>
+                A call and dependency graph lets RACA trace how modules connect
+                — useful for architecture questions and bug traces.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ── How it works steps ── */}
+        <section className="home-steps scroll-reveal visible">
+          <div className="home-section-heading">
+            <div>
+              <span className="eyebrow">GETTING STARTED</span>
+              <h2>Up and running in three steps.</h2>
+            </div>
+          </div>
+          <ol className="steps-list">
+            <li className="step-item">
+              <span className="step-number">01</span>
+              <div>
+                <h3>Connect a repository</h3>
+                <p>Paste a public GitHub URL. RACA clones the repo locally and starts building the index in the background.</p>
+              </div>
+            </li>
+            <li className="step-item">
+              <span className="step-number">02</span>
+              <div>
+                <h3>Wait for indexing</h3>
+                <p>The semantic, keyword, and code-graph indexes are built automatically. It usually takes under a minute for mid-size repositories.</p>
+              </div>
+            </li>
+            <li className="step-item">
+              <span className="step-number">03</span>
+              <div>
+                <h3>Start asking questions</h3>
+                <p>Open the editor or any analysis page and ask. Answers cite real file paths and line numbers from your codebase.</p>
+              </div>
+            </li>
+          </ol>
+        </section>
+
+        {/* ── Team teaser ── */}
+        <section className="home-team-teaser scroll-reveal visible">
+          <div className="team-teaser-copy">
+            <span className="eyebrow">OUR TEAM</span>
+            <h2>Our Team.</h2>
+            <p>
+              Four people, each working on a different part of the system:
+              AI retrieval, the repository knowledge graph, source-code
+              analysis, and full-stack integration.
+            </p>
+            <button className="replace-action team-teaser-cta" onClick={() => navigate("team")}>
+              Meet the team →
+            </button>
+          </div>
+          <div className="team-teaser-avatars">
+            {[
+              { initials: "SW", name: "Sameer ", regNo: "23BCE20316" },
+              { initials: "AR", name: "Angelina", regNo: "23BCE8127" },
+              { initials: "AM", name: "Aadil", regNo: "23BCE8913" },
+              { initials: "SK", name: "Samruddha", regNo: "23BCE8851" },
+            ].map((p) => (
+              <div className="teaser-avatar-card" key={p.initials} title={p.name}>
+                <div className="teaser-avatar">{p.initials}</div>
+                <div className="teaser-avatar-info">
+                  <span className="teaser-avatar-name">{p.name.split(" ")[0]}</span>
+                  <span className="teaser-avatar-reg">{p.regNo}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         {showReplaceForm && (
           <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
@@ -955,7 +947,25 @@ function App() {
             </section>
           </div>
         )}
-      </div>
+      </main>
+    );
+
+    return (
+      <LandingPage
+        onNavigate={navigate}
+        theme={theme}
+        onToggleTheme={() => {
+          const next = theme === "dark" ? "light" : "dark";
+          setTheme(next);
+          applyTheme(next);
+        }}
+        repository={repository}
+        onConnectRepository={(url) => {
+          if (url) setGithubUrl(url);
+          setShowReplaceForm(true);
+        }}
+        workspaceSection={workspaceContent}
+      />
     );
   }
 
@@ -1164,24 +1174,29 @@ function App() {
                       }
                       key={index}
                     >
-                      <div className="message-role">
-                        {message.role ===
-                        "user"
-                          ? "You"
-                          : "RACA"}
+                      <div className="message-header-row">
+                        <div className="message-role">
+                          {message.role === "user" ? "You" : "RACA"}
+                        </div>
+                        {message.role === "assistant" && (
+                          <div className={`message-model-badge ${isStreaming && index === messages.length - 1 ? "streaming" : ""}`}>
+                            <span className="badge-pulse-dot" />
+                            <span>
+                              {isStreaming && index === messages.length - 1
+                                ? "Generating response…"
+                                : (llmModels.find((m) => m.id === selectedModel)?.label || selectedModel)}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="message-content">
                         {message.role ===
                         "assistant" ? (
-                          <ReactMarkdown
-                            remarkPlugins={[
-                              remarkGfm,
-                            ]}
-                          >
-                            {message.content ||
-                              "▌"}
-                          </ReactMarkdown>
+                          <StreamingMarkdown
+                            content={message.content}
+                            isStreaming={isStreaming && index === messages.length - 1}
+                          />
                         ) : (
                           message.content
                         )}

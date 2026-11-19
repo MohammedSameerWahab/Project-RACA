@@ -1,0 +1,52 @@
+/* ==========================================================================
+   RACA Design Tokens
+   - Dark Mode: Rich Espresso Brown & Crisp White
+   - Light Mode: Beige, black, and white
+   ========================================================================== */
+
+:root {
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono:    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+/* --- Dark Theme: Espresso Brown & White --- */
+:root,
+[data-theme="dark"] {
+  --lp-bg:          #120d0a; /* Deep espresso */
+  --lp-bg-deep:     #0c0806;
+  --lp-surface:     #1c140f; /* Warm rich brown */
+  --lp-surface-alt: #261c15;
+  --lp-line:        #3a2b20; /* Toasted walnut */
+  --lp-text:        #ffffff; /* Crisp white */
+  --lp-text-strong: #ffffff;
+  --lp-muted:       #ba9f88; /* Hazelnut / biscuit */
+  --lp-accent:      #d4976a; /* Amber/copper caramel */
+  --lp-accent-glow: rgba(212, 151, 106, 0.45);
+  --lp-accent-ink:  #120d0a;
+  --lp-glass-bg:    rgba(28, 20, 15, 0.72);
+  --lp-glass-border:rgba(212, 151, 106, 0.24);
+  --lp-glass-card:  rgba(24, 17, 13, 0.78);
+  --lp-btn-primary: #8a4823;
+  --lp-btn-hover:   #a3552a;
+}
+
+/* --- Light Theme: Beige, black, and white --- */
+[data-theme="light"] {
+  --lp-bg:          #F4EFE6;
+  --lp-bg-deep:     #E7DFD2;
+  --lp-surface:     #FFFFFF;
+  --lp-surface-alt: #EFE8DC;
+  --lp-line:        #D9D0C3;
+  --lp-text:        #111111;
+  --lp-text-strong: #000000;
+  --lp-muted:       #5C564E;
+  --lp-accent:      #111111;
+  --lp-accent-glow: transparent;
+  --lp-accent-ink:  #FFFFFF;
+  --lp-glass-bg:    rgba(244, 239, 230, 0.92);
+  --lp-glass-border:rgba(17, 17, 17, 0.12);
+  --lp-glass-card:  rgba(255, 255, 255, 0.94);
+  --lp-btn-primary: #111111;
+  --lp-btn-hover:   #000000;
+}
