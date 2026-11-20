@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
@@ -44,9 +45,21 @@ CLOUDFLARE_BASE_URL = (
     "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
 )
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-LOCAL_BASE_URL = os.getenv(
-    "LOCAL_LLM_BASE_URL", "http://localhost:11434/v1"
-).strip()
+
+
+def _normalize_local_base_url(base_url: str) -> str:
+    base_url = base_url.strip().rstrip("/")
+    if base_url and "://" not in base_url:
+        scheme = "http" if base_url.startswith(("localhost", "127.0.0.1")) else "https"
+        base_url = f"{scheme}://{base_url}"
+    if urlsplit(base_url).path in ("", "/"):
+        return f"{base_url}/v1"
+    return base_url
+
+
+LOCAL_BASE_URL = _normalize_local_base_url(
+    os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1").strip()
+)
 
 PROVIDERS = (
     ModelProvider(

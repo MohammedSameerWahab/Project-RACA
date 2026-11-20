@@ -387,6 +387,10 @@ LOCAL_LLM_MODEL=qwen2.5-coder:3b
 LOCAL_LLM_API_KEY=
 ```
 
+For a tunneled or remote endpoint, use its HTTPS URL and include `/v1` if the
+endpoint exposes an OpenAI-compatible API there. If the URL is only the server
+root, RACA appends `/v1` automatically.
+
 Do not commit real credentials. The frontend development server proxies `/api` to `http://127.0.0.1:8000`. Set `RACA_API_TARGET` to use another backend address.
 
 ## 11. Tests and Validation

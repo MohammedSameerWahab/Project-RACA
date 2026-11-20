@@ -20,7 +20,7 @@ from src.generation.providers import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_OUTPUT_TOKENS = 4096
+DEFAULT_MAX_OUTPUT_TOKENS = 8192
 DEFAULT_TEMPERATURE = 1.0
 DEFAULT_TOP_P = 0.95
 DEFAULT_TIMEOUT = httpx.Timeout(45.0, connect=10.0)
@@ -297,28 +297,28 @@ class LLMGenerator:
         )
 
     def _client_for(self, provider: ModelProvider) -> AsyncOpenAI:
-        credentials = provider.credentials()
-        if credentials is None:
-            raise ValueError(f"{provider.label} is not configured.")
-        api_key, base_url = credentials
-        cache_key = (base_url, api_key)
+            credentials = provider.credentials()
+            if credentials is None:
+                raise ValueError(f"{provider.label} is not configured.")
+            api_key, base_url = credentials
+            cache_key = (base_url, api_key)
 
-        client = self._clients.get(cache_key)
-        if client is not None:
+            client = self._clients.get(cache_key)
+            if client is not None:
+                return client
+
+            is_local = provider.id == "local-qwen2.5-coder-3b"
+            client = AsyncOpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                max_retries=0,
+                timeout=LOCAL_TIMEOUT if is_local else DEFAULT_TIMEOUT,
+                default_headers=(
+                    {"ngrok-skip-browser-warning": "true"} if is_local else None
+                ),
+            )
+            self._clients[cache_key] = client
             return client
-
-        client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            max_retries=0,
-            timeout=(
-                LOCAL_TIMEOUT
-                if provider.id == "local-qwen2.5-coder-3b"
-                else DEFAULT_TIMEOUT
-            ),
-        )
-        self._clients[cache_key] = client
-        return client
 
     @staticmethod
     def _fallback_order(preferred_model: str) -> tuple[ModelProvider, ...]:
@@ -336,14 +336,15 @@ class LLMGenerator:
     @staticmethod
     def _failure_reason(exc: Exception) -> str:
         detail = str(exc).strip()
+        cause = f" ({type(exc.__cause__).__name__}: {exc.__cause__})" if exc.__cause__ else ""
         if isinstance(exc, APIStatusError):
             error = f"{type(exc).__name__} (HTTP {exc.status_code})"
         else:
             error = type(exc).__name__
         if detail:
-            return f"{error}: {detail}"
+            return f"{error}: {detail}{cause}"
         if isinstance(exc, APIConnectionError):
-            return f"{error}: provider connection failed without further detail."
+            return f"{error}: provider connection failed{cause}."
         if isinstance(exc, ValueError):
             return f"{error}: invalid provider response."
         return f"{error}: no additional error detail."

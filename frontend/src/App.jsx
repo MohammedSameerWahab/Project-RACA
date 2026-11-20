@@ -13,6 +13,8 @@ import heroArt from "./assets/hero.png";
 import "./App.css";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const INDEXING_STATUSES = ["indexing", "queued", "cloning"];
+const ARCHITECTURE_CACHE_KEY = "raca.architectureAnalysis";
 const PAGES = new Set([
   "landing",
   "workspace",
@@ -47,10 +49,33 @@ function indexStatusLabel(status) {
   if (status === "error") {
     return "Index error";
   }
-  if (["indexing", "queued", "cloning"].includes(status)) {
+  if (INDEXING_STATUSES.includes(status)) {
     return "Index updating";
   }
   return "Index ready";
+}
+
+function readArchitectureCache(repositoryKey) {
+  const serialized = window.sessionStorage.getItem(ARCHITECTURE_CACHE_KEY);
+  if (!serialized) {
+    return null;
+  }
+
+  const cached = JSON.parse(serialized);
+  if (cached.repositoryKey !== repositoryKey) {
+    return null;
+  }
+  if (cached.status === "success" && typeof cached.result?.explanation === "string") {
+    return cached;
+  }
+  if (cached.status === "error" && typeof cached.error === "string") {
+    return cached;
+  }
+  return null;
+}
+
+function writeArchitectureCache(analysis) {
+  window.sessionStorage.setItem(ARCHITECTURE_CACHE_KEY, JSON.stringify(analysis));
 }
 
 function App() {
@@ -64,6 +89,7 @@ function App() {
   const [repository, setRepository] = useState(null);
   const [repositoryProfile, setRepositoryProfile] = useState(null);
   const [repositoryKey, setRepositoryKey] = useState(null);
+  const [architectureAnalysis, setArchitectureAnalysis] = useState(null);
   const [githubUrl, setGithubUrl] = useState("");
   const [ingesting, setIngesting] = useState(false);
   const [error, setError] = useState("");
@@ -104,11 +130,76 @@ function App() {
   const chatEndRef = useRef(null);
   const saveFileRef = useRef(null);
   const navigationTargetRef = useRef(null);
+  const architectureAttemptsRef = useRef(new Set());
+  const currentRepositoryKeyRef = useRef(repositoryKey);
+  currentRepositoryKeyRef.current = repositoryKey;
   const request = useCallback((path, options = {}) => {
     const headers = new Headers(options.headers || {});
     headers.set("X-Raca-Model", selectedModel);
     return apiRequest(path, { ...options, headers });
   }, [selectedModel]);
+  const analyzeArchitecture = useCallback(async (key, retry = false) => {
+    if (!key || (architectureAttemptsRef.current.has(key) && !retry)) {
+      return;
+    }
+
+    architectureAttemptsRef.current.add(key);
+    if (!retry) {
+      try {
+        const cached = readArchitectureCache(key);
+        if (cached) {
+          setArchitectureAnalysis(cached);
+          return;
+        }
+      } catch (reason) {
+        setArchitectureAnalysis({
+          repositoryKey: key,
+          status: "error",
+          error: `Could not read the saved architecture analysis: ${reason.message}`,
+        });
+        return;
+      }
+    }
+
+    setArchitectureAnalysis({ repositoryKey: key, status: "loading" });
+    try {
+      const result = await request("/api/analysis/repository/architecture", {
+        method: "POST",
+        headers: { "ngrok-skip-browser-warning": "true" },
+      });
+      if (currentRepositoryKeyRef.current === key) {
+        const analysis = {
+          repositoryKey: key,
+          status: "success",
+          result: {
+            explanation: result.explanation,
+            graph_records: result.graph_records,
+            graph_truncated: result.graph_truncated,
+          },
+        };
+        try {
+          writeArchitectureCache(analysis);
+        } catch (reason) {
+          analysis.cacheWarning = `The analysis could not be saved for this tab: ${reason.message}`;
+        }
+        setArchitectureAnalysis(analysis);
+      }
+    } catch (reason) {
+      if (currentRepositoryKeyRef.current === key) {
+        const analysis = {
+          repositoryKey: key,
+          status: "error",
+          error: reason.message,
+        };
+        try {
+          writeArchitectureCache(analysis);
+        } catch (cacheError) {
+          analysis.cacheWarning = `The failure state could not be saved for this tab: ${cacheError.message}`;
+        }
+        setArchitectureAnalysis(analysis);
+      }
+    }
+  }, [request]);
 
   const navigate = useCallback((nextPage) => {
     const safePage = PAGES.has(nextPage) ? nextPage : "landing";
@@ -199,6 +290,7 @@ function App() {
         setRepository(null);
         setRepositoryKey(null);
         setRepositoryProfile(null);
+        setArchitectureAnalysis(null);
       }
     } catch (err) {
       setError(err.message);
@@ -277,6 +369,12 @@ function App() {
   }, [repository, ingesting, indexStatus.status]);
 
   useEffect(() => {
+    if (repositoryKey && !INDEXING_STATUSES.includes(indexStatus.status)) {
+      void analyzeArchitecture(repositoryKey);
+    }
+  }, [analyzeArchitecture, indexStatus.status, repositoryKey]);
+
+  useEffect(() => {
     chatEndRef.current?.scrollIntoView({
       behavior: "smooth",
     });
@@ -333,6 +431,7 @@ function App() {
 
       setRepository(data.repository);
       setRepositoryKey(data.repository_key);
+      setArchitectureAnalysis(null);
       setMessages([]);
       setSelectedFile(null);
       setFileContent("");
@@ -984,7 +1083,15 @@ function App() {
             {indexStatusLabel(indexStatus.status)}
           </span>
         </header>
-        {page === "understanding" && <RepositoryUnderstanding request={request} onOpenSource={openFile} />}
+        {page === "understanding" && (
+          <RepositoryUnderstanding
+            request={request}
+            onOpenSource={openFile}
+            architecture={architectureAnalysis?.repositoryKey === repositoryKey ? architectureAnalysis : null}
+            isIndexing={INDEXING_STATUSES.includes(indexStatus.status)}
+            onRetryArchitecture={() => analyzeArchitecture(repositoryKey, true)}
+          />
+        )}
         {page === "navigation" && <CodeNavigation request={request} onOpenSource={openFile} />}
         {page === "bugs" && <BugInvestigation request={request} onOpenSource={openFile} selectedFile={selectedFile} selectedCode={selectedCode} />}
       </div>

@@ -39,6 +39,13 @@ class KeywordRetriever:
             raise ValueError("Invalid PostgreSQL table name.")
         self.table_name = table_name
 
+    @staticmethod
+    def _search_query(query: str) -> str:
+        terms = re.findall(r"[a-zA-Z0-9_]+", query)
+        if not terms:
+            raise ValueError("Search query must contain searchable terms.")
+        return " OR ".join(terms)
+
     async def search(
         self,
         query: str,
@@ -48,7 +55,7 @@ class KeywordRetriever:
         Search repository code using keyword matching.
 
         Args:
-            query: Keyword or phrase to search for.
+            query: Natural-language query whose searchable terms are OR-matched.
             top_k: Maximum number of results.
 
         Returns:
@@ -65,6 +72,7 @@ class KeywordRetriever:
                 "top_k must be greater than zero."
             )
 
+        search_query = self._search_query(query)
         pool = await asyncpg.create_pool(
             self.database_url
         )
@@ -83,7 +91,7 @@ class KeywordRetriever:
                                 'english',
                                 code
                             ),
-                            plainto_tsquery(
+                            websearch_to_tsquery(
                                 'english',
                                 $1
                             )
@@ -94,14 +102,14 @@ class KeywordRetriever:
                     WHERE to_tsvector(
                         'english',
                         code
-                    ) @@ plainto_tsquery(
+                    ) @@ websearch_to_tsquery(
                         'english',
                         $1
                     )
                     ORDER BY score DESC
                     LIMIT $2
                     """,
-                    query,
+                    search_query,
                     top_k,
                 )
         finally:

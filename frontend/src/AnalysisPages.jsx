@@ -50,10 +50,15 @@ function ResultList({ items, onOpenSource, empty = "No matching results." }) {
   );
 }
 
-function RepositoryUnderstanding({ request, onOpenSource }) {
+function RepositoryUnderstanding({
+  request,
+  onOpenSource,
+  architecture,
+  isIndexing,
+  onRetryArchitecture,
+}) {
   const [tab, setTab] = useState("architecture");
   const [structure, setStructure] = useState(null);
-  const [architecture, setArchitecture] = useState(null);
   const [query, setQuery] = useState("");
   const [relationships, setRelationships] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -110,27 +115,45 @@ function RepositoryUnderstanding({ request, onOpenSource }) {
           <div className="analysis-card-heading">
             <div>
               <h2>Architecture</h2>
-              <p>Generated from repository files and indexed graph relationships.</p>
+              <p>Generated automatically from repository files and indexed graph relationships.</p>
             </div>
-            <button disabled={loading} onClick={async () => {
-              const result = await run("/api/analysis/repository/architecture", {
-                method: "POST",
-              });
-              if (result) setArchitecture(result);
-            }}>
-              {loading ? "Analyzing…" : architecture ? "Analyze again" : "Analyze architecture"}
-            </button>
+            {architecture?.status === "loading" && (
+              <span className="analysis-note" role="status">Analyzing…</span>
+            )}
+            {(architecture?.status === "success" || architecture?.status === "error") && (
+              <button onClick={onRetryArchitecture}>
+                {architecture.status === "success" ? "Analyze again" : "Retry analysis"}
+              </button>
+            )}
           </div>
-          {architecture ? (
+          {architecture?.status === "success" ? (
             <>
-              <Markdown>{architecture.explanation}</Markdown>
+              <Markdown>{architecture.result.explanation}</Markdown>
+              {architecture.cacheWarning && (
+                <p className="analysis-error" role="alert">{architecture.cacheWarning}</p>
+              )}
               <p className="analysis-note">
-                Graph records inspected: {architecture.graph_records}
-                {architecture.graph_truncated ? " (sample truncated)" : ""}.
+                Graph records inspected: {architecture.result.graph_records}
+                {architecture.result.graph_truncated ? " (sample truncated)" : ""}.
               </p>
             </>
+          ) : architecture?.status === "error" ? (
+            <>
+              <p className="analysis-error" role="alert">
+                Architecture analysis failed: {architecture.error}
+              </p>
+              {architecture.cacheWarning && (
+                <p className="analysis-error" role="alert">{architecture.cacheWarning}</p>
+              )}
+            </>
           ) : (
-            <p className="analysis-empty">Run an analysis to explain components, dependencies, and execution flow grounded in this repository.</p>
+            <p className="analysis-empty" role="status">
+              {architecture?.status === "loading"
+                ? "Architecture analysis is running. This may take a few minutes."
+                : isIndexing
+                  ? "Architecture analysis will start when repository indexing is complete."
+                  : "Architecture analysis will be generated automatically for the active repository."}
+            </p>
           )}
         </div>
       )}

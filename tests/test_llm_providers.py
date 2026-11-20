@@ -14,6 +14,7 @@ from src.generation.providers import (
     DEFAULT_MODEL,
     PROVIDERS,
     PROVIDERS_BY_ID,
+    _normalize_local_base_url,
     model_options,
 )
 
@@ -102,6 +103,25 @@ def test_local_provider_uses_longer_read_timeout(
     assert isinstance(timeout, llm_module.httpx.Timeout)
     assert timeout.read == 180.0
     assert timeout.connect == 10.0
+
+
+@pytest.mark.parametrize(
+    ("base_url", "expected"),
+    [
+        ("https://example.ngrok-free.app", "https://example.ngrok-free.app/v1"),
+        ("https://example.ngrok-free.app/", "https://example.ngrok-free.app/v1"),
+        ("https://example.ngrok-free.app/v1", "https://example.ngrok-free.app/v1"),
+        (
+            "https://example.ngrok-free.app/custom/v1/",
+            "https://example.ngrok-free.app/custom/v1",
+        ),
+    ],
+)
+def test_local_base_url_adds_v1_only_when_no_api_path_is_provided(
+    base_url: str,
+    expected: str,
+) -> None:
+    assert _normalize_local_base_url(base_url) == expected
 
 
 def test_selected_model_is_tried_before_fallback(

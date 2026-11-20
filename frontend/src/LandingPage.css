@@ -165,6 +165,29 @@
   gap: 14px;
 }
 
+.raca-github-link {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--lp-text-strong);
+  text-decoration: none;
+  transition: color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.raca-github-link svg {
+  width: 19px;
+  height: 19px;
+}
+
+.raca-github-link:hover {
+  color: var(--lp-accent);
+  border-color: var(--lp-accent);
+  transform: translateY(-1px);
+}
+
 /* Theme toggle pill */
 .raca-theme-toggle {
   width: 44px;
